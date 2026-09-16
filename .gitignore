@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Downloaded Climate Engine report payloads (raw zips) — regenerated each cycle
+data/reports/raw/
+
+# Local secrets
+.env

@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?><metadata>
+    <idinfo>
+        <citation>
+            <citeinfo>
+                <origin/>
+                <title>Irrigation Organizations</title>
+                <geoform>vector digital data</geoform>
+                <pubinfo>
+                    <pubplace/>
+                    <publish>Idaho Department of Water Resources</publish>
+                </pubinfo>
+                <onlink>http://www.idwr.idaho.gov/gisdata/gis_data.htm</onlink>
+            </citeinfo>
+        </citation>
+        <descript>
+            <abstract>These shapes represent the Service Areas within which an irrigation organization can deliver water rights. They do not represent the total acres that a irrigation organization can irrigate. That is determined by the organization's and/or shareholder's individual water rights. These shapes may change during a water right adjudication, an Idaho Department of Water Resources (IDWR) administrative action, or other legal boundary change process.  If PlaceOfUse = -999 then the service area is a combination of the water rights with spatially described places of use in the name of organization. This technique is used to describe organizations where the SRBA has not occured and /or recommendations for the Northern Idaho Adjudication have not been made. If an organization does not have water rights described at the IDWR but was created pursuant to I.C. Title 43, it will be included on request of IDWR staff and identified by PROCESS = none &amp;amp; PlaceofUse = 0.The boundary encompassing the place of use for an Irrigation Organization's water right(s) can be referred to as a Large Place of Use if described with a digital boundary as defined by I.C. Section 42-202B(2) and authorized pursuant to I.C. Section 42-1411(2)(h). The delivery of water to the acreage authorized for the water right(s) within the digital boundary is controlled by the Irrigation Organization. A Large Place of Use can be identified with a LPOU = YES. Drainage Districts and Tribal Rights are not represented.</abstract>
+            <purpose>The areas in which water delivery organizations, commonly called irrigation companies, are authorized to distribute water as described by water right(s) in Idaho.</purpose>
+            <supplinf>If PlaceOfUse = -999 then the service area is a combination of the water rights with spatially described places of use in the name of organization. This technique is used to describe organizations where the SRBA has not occured and /or recommendations for the Northern Idaho Adjudication have not been made. If an organization does not have water rights described at the IDWR but was created pursuant to I.C. Title 43, it will be included on request of IDWR staff and identified by PROCESS = none &amp; PlaceofUse = 0.The boundary encompassing the place of use for an Irrigation Organization's water right(s) can be referred to as a Large Place of Use if described with a digital boundary as defined by I.C. Section 42-202B(2) and authorized pursuant to I.C. Section 42-1411(2)(h). The delivery of water to the acreage authorized for the water right(s) within the digital boundary is controlled by the Irrigation Organization. A Large Place of Use can be identified with a LPOU = YES.</supplinf>
+        </descript>
+        <timeperd>
+            <timeinfo>
+                <sngdate>
+                    <caldate>20110721</caldate>
+                </sngdate>
+            </timeinfo>
+            <current>publication date</current>
+        </timeperd>
+        <status>
+            <progress>In work</progress>
+            <update>Irregular</update>
+        </status>
+        <spdom>
+            <bounding>
+                <westbc>-117.400971</westbc>
+                <eastbc>-110.746120</eastbc>
+                <northbc>49.022388</northbc>
+                <southbc>41.967862</southbc>
+            </bounding>
+        </spdom>
+        <keywords>
+            <theme>
+                <themekt>ESRI Geography Network Thesaurus</themekt>
+                <themekey>Irrigation company</themekey>
+            </theme>
+            <place>
+                <placekt>None</placekt>
+                <placekey>Idaho</placekey>
+            </place>
+            <stratum>
+                <stratkt>None</stratkt>
+                <stratkey>Irrigation</stratkey>
+            </stratum>
+        </keywords>
+        <accconst>Public</accconst>
+        <useconst>The Idaho Department of Water Resources is making this data available as a public service. The Idaho Department of Water Resources strives to ensure that all technical data and other information made available to the public is accurate, complete and in conformance with the Idaho Public Records Act. Neither the Department of Water Resources nor the State of Idaho, however, assumes any legal responsibility for the accuracy or completeness of the information contained on this site.Persons using information from this site for official purposes, or other purposes, for which accuracy and completeness are required, are hereby notified that they should first verify the information with the public records or other primary sources from which the information was obtained.</useconst>
+        <ptcontac>
+            <cntinfo>
+                <cntorgp>
+                    <cntorg>Idaho Department of Water Resources</cntorg>
+                    <cntper>Michael Ciscell</cntper>
+                </cntorgp>
+                <cntpos>GIS Analyst</cntpos>
+                <cntaddr>
+                    <addrtype>mailing</addrtype>
+                    <address>322 East Front Street</address>
+                    <city>Boise</city>
+                    <state>Idaho</state>
+                    <postal>83720</postal>
+                    <country>US</country>
+                </cntaddr>
+                <cntvoice>(208) 287-4800</cntvoice>
+                <cntfax>(208) 287-6700</cntfax>
+                <cntemail>gisinfo@idwr.idaho.gov</cntemail>
+                <hours>8:00 to 5:00</hours>
+            </cntinfo>
+        </ptcontac>
+        <datacred>Idaho Department of Water Resources</datacred>
+        <secinfo>
+            <secsys>State of Idaho GIS Data Protocol</secsys>
+            <sechandl>Public data is accessible to all requester categories, including the General Public, with limited to no restrictions.</sechandl>
+        </secinfo>
+        <native>ESRI ArcGIS 10.0.3.3600</native>
+    </idinfo>
+    <dataqual>
+        <logic>ESRI feature type: Simple, Geometry: Polygon, Topology:</logic>
+        <complete>Data set has been visually inspected. All data produced strives to meet National Mapping Accuracy Standards (NMAS).</complete>
+        <lineage>
+            <procstep>
+                <procdesc>Service Area Boundaries created from PLS description of company's SRBA claim. Service area is modified based on edits from company staff. Most edits use digitizing from 1987 aerial photography or snapping to GCDB to update geometry. Metadata imported.</procdesc>
+                <proccont>
+                    <cntinfo>
+                        <cntperp>
+                            <cntper>Michael Ciscell</cntper>
+                        </cntperp>
+                        <cntvoice>208-287-4915</cntvoice>
+                        <cntemail>michael.ciscell@idwr.idaho.gov</cntemail>
+                    </cntinfo>
+                </proccont>
+            </procstep>
+            <procstep>
+                <procdesc>Query of recommendation and water rights layer LPOU = 1, Waterusecode = 01,02,03, Status = Active.</procdesc>
+                <procdate>20070213</procdate>
+                <proctime>124256</proctime>
+            </procstep>
+        </lineage>
+    </dataqual>
+    <spdoinfo>
+        <direct>Vector</direct>
+        <ptvctinf>
+            <sdtsterm>
+                <sdtstype>GT-polygon composed of chains</sdtstype>
+                <ptvctcnt>0</ptvctcnt>
+            </sdtsterm>
+        </ptvctinf>
+    </spdoinfo>
+    <eainfo>
+        <detailed>
+            <enttyp>
+                <enttypl>irrigation_companies</enttypl>
+            </enttyp>
+            <attr>
+                <attrlabl>OBJECTID</attrlabl>
+                <attrdef>Internal feature number.</attrdef>
+                <attrdefs>Esri</attrdefs>
+                <attrdomv>
+                                                                                
+          
+                    
+                    
+                    <udom>Sequential unique whole numbers that are automatically generated.</udom>
+                                                                              
+        
+                
+                
+                </attrdomv>
+            </attr>
+            <attr>
+                <attrlabl>Shape</attrlabl>
+                <attrdef>Feature geometry.</attrdef>
+                <attrdefs>ESRI</attrdefs>
+                <attrdomv>
+                                                                                
+          
+                    
+                    
+                    <udom>Coordinates defining the features.</udom>
+                                                                              
+        
+                
+                
+                </attrdomv>
+            </attr>
+            <attr>
+                <attrlabl>Owner</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>PLACEOFUSE</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>WaterMan.DBO.IrrigationCompanies.AREA</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>PROCESS</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>LPOU</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>NAME</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>PERIMETER</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>ACRES</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>Shape.STArea()</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>Shape.STLength()</attrlabl>
+            </attr>
+        </detailed>
+    </eainfo>
+    <distinfo>
+        <distliab>See access and use constraints information.</distliab>
+    </distinfo>
+    <metainfo>
+        <metd>20120126</metd>
+        <metc>
+            <cntinfo>
+                <cntorgp>
+                    <cntorg>Idaho Department of Water Resources</cntorg>
+                    <cntper>Geospatial Technology</cntper>
+                </cntorgp>
+                <cntpos>GIS Analyst</cntpos>
+                <cntaddr>
+                    <addrtype>mailing</addrtype>
+                    <address>322 East Front Street</address>
+                    <city>Boise</city>
+                    <state>Idaho</state>
+                    <postal>83720</postal>
+                    <country>US</country>
+                </cntaddr>
+                <cntvoice>(208) 287-4800</cntvoice>
+                <cntfax>(208) 287-6700</cntfax>
+                <cntemail>gisinfo@idwr.idaho.gov</cntemail>
+                <hours>8:00 to 5:00</hours>
+            </cntinfo>
+        </metc>
+        <metstdn>FGDC Content Standard for Digital Geospatial Metadata</metstdn>
+        <metstdv>FGDC-STD-001-1998</metstdv>
+        <mettc>local time</mettc>
+    </metainfo>
+</metadata>
