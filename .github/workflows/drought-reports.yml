@@ -51,16 +51,23 @@ jobs:
           if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
           python scripts/run_pipeline.py $ARGS
 
+      # site/ is a pure build artifact (regenerated fresh every run from
+      # data/reports/extracted, itself regenerated fresh from the API) and
+      # deployed straight to Pages below -- never committed to git (333
+      # polygons' worth of PNGs/CSVs is ~550MB; committing that every 5 days
+      # would balloon the repo by tens of GB/year). Only state.json, a few
+      # bytes, is tracked -- it's what tells us the pipeline actually ran
+      # this cycle (run_pipeline.py no-ops and leaves it untouched otherwise).
       - id: diff
         run: |
-          git add -A
+          git add data/reports/state.json
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Commit updated reports and site
+      - name: Commit state.json
         if: steps.diff.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"

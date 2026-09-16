@@ -50,7 +50,11 @@ def main() -> None:
         return
 
     for layer in LAYERS:
-        run_layer(layer, limit=args.limit, end_date=today.isoformat(), sleep_s=0.5)
+        run_layer(layer, limit=args.limit, end_date=today.isoformat())
+        # One automatic retry pass: transient failures (concurrency-limit
+        # errors, network blips) are expected at some rate every run -- see
+        # DECISIONS.md. This mops most of them up without manual intervention.
+        run_layer(layer, limit=args.limit, end_date=today.isoformat(), retry_failed=True)
 
     build(run_date=today.isoformat())
     save_last_run(today)

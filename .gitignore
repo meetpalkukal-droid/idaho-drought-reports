@@ -4,11 +4,19 @@ __pycache__/
 venv/
 
 # Downloaded/extracted Climate Engine report payloads — regenerated each
-# cycle straight from the API; only site/ (the built output) is committed.
-# state.json is the exception: it's tracked so the 5-day cadence check
-# survives across separate GitHub Actions runs.
+# cycle straight from the API. state.json is the exception: it's tracked
+# so the 5-day cadence check survives across separate GitHub Actions runs.
 data/reports/raw/
 data/reports/extracted/
+
+# The built site is a pure artifact of data/reports/extracted -- regenerated
+# fresh every cycle by build_site.py and deployed straight to GitHub Pages
+# via the Actions artifact upload, never committed (333 polygons' worth of
+# PNGs/CSVs is ~550MB; committing that every 5 days would balloon the repo
+# by tens of GB/year since git never discards old blob history). Hand-
+# authored files (currently just assets/) are the only exception.
+/site/*
+!/site/assets/
 
 # Local secrets
 .env

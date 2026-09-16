@@ -19,15 +19,25 @@ Usage:
     python scripts/fetch_reports.py --layer groundwater_districts --limit 1   # smoke test
     python scripts/fetch_reports.py --layer groundwater_districts
     python scripts/fetch_reports.py --layer irrigation_organizations
+    python scripts/fetch_reports.py --layer irrigation_organizations --retry-failed
 
 Architecture (confirmed against real API responses -- see README "Confirmed
-API behavior"): a single feature_collection call is scoped to ONE polygon
-(sub_choices/filter_by select it), and a synchronous (batch=False) call
-blocks for 1-3+ minutes per polygon -- far too slow to run 363 times in
-sequence. So this submits every polygon with batch=True (returns in ~8s
-with a status_link to poll), then polls all outstanding jobs in a single
-round-robin loop until each reports status "success" (or an error/timeout),
-then downloads+extracts the resulting zip.
+API behavior" and DECISIONS.md): a single feature_collection call is scoped
+to ONE polygon (sub_choices/filter_by select it), and a synchronous
+(batch=False) call blocks for 1-3+ minutes per polygon -- far too slow to
+run 363 times in sequence. So this submits every polygon with batch=True
+(returns in ~8s with a status_link to poll).
+
+A first full run against all 350 irrigation organizations confirmed a real
+constraint: submitting everything at once (183 concurrent jobs) blew
+through Earth Engine's per-project concurrent interactive request quota --
+41 jobs failed with an explicit "Too Many Requests: concurrency limit
+exceeded" error, and Climate Engine's own submit endpoint started
+rejecting further requests too (with a misleading 404 "Endpoint Removed"
+body) once ~186 jobs were in flight. So submission is throttled to at most
+MAX_IN_FLIGHT concurrently-running jobs (a sliding window: only submit a
+new one once an earlier one finishes), not just rate-limited on how fast
+we can POST.
 """
 
 from __future__ import annotations
@@ -39,7 +49,6 @@ import re
 import sys
 import time
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import geopandas as gpd
@@ -58,10 +67,16 @@ LAYERS = {
     "irrigation_organizations": "IRR_ASSET_ID",
 }
 
-# Terminal-state polling: individual jobs took ~2-3 min in testing.
-POLL_INTERVAL_S = 20
-POLL_TIMEOUT_S = 20 * 60
+# Individual jobs took ~2-5 min in testing.
+POLL_INTERVAL_S = 15
+JOB_TIMEOUT_S = 20 * 60
 IN_PROGRESS_STATUSES = {"running", "pending", "queued", "in_progress", "started"}
+
+# How many jobs may be submitted-but-not-yet-terminal at once. 183
+# concurrent jobs reliably exceeded Earth Engine's concurrent interactive
+# request quota (see module docstring); this is a conservative starting
+# point, not a value confirmed safe at its own ceiling -- see DECISIONS.md.
+DEFAULT_MAX_IN_FLIGHT = 15
 
 
 def slugify(name: str) -> str:
@@ -114,46 +129,6 @@ def submit_report(
     }
 
 
-def poll_all(jobs: dict[str, dict]) -> dict[str, dict]:
-    """jobs: slug -> job dict (must have 'status_link'). Round-robin polls
-    every outstanding job's status_link until each reaches a terminal state
-    (status != IN_PROGRESS_STATUSES) or POLL_TIMEOUT_S elapses. Returns
-    slug -> final status dict (may include {'status': 'timeout'})."""
-    pending = dict(jobs)
-    results: dict[str, dict] = {}
-    t0 = time.time()
-
-    while pending:
-        for slug, job in list(pending.items()):
-            if not job.get("status_link"):
-                results[slug] = {"status": "error", "message": "no status_link in submit response"}
-                del pending[slug]
-                continue
-            try:
-                r = requests.get(job["status_link"], timeout=30)
-            except requests.RequestException as e:
-                print(f"  [{slug}] status check failed: {e}", file=sys.stderr)
-                continue
-            if r.status_code != 200:
-                continue  # zip/status not written to GCS yet
-            data = r.json()
-            if data.get("status") not in IN_PROGRESS_STATUSES:
-                results[slug] = data
-                del pending[slug]
-                print(f"  [{slug}] {data.get('status')} after {time.time()-t0:.0f}s", file=sys.stderr)
-
-        if pending and time.time() - t0 > POLL_TIMEOUT_S:
-            for slug in pending:
-                results[slug] = {"status": "timeout"}
-            print(f"  TIMEOUT: {len(pending)} job(s) still pending after {POLL_TIMEOUT_S}s: {list(pending)}", file=sys.stderr)
-            break
-
-        if pending:
-            time.sleep(POLL_INTERVAL_S)
-
-    return results
-
-
 def download_and_extract(zip_url: str, dest_dir: Path) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     zip_path = dest_dir / "report.zip"
@@ -168,12 +143,35 @@ def download_and_extract(zip_url: str, dest_dir: Path) -> Path:
     return dest_dir
 
 
+def _previously_failed_or_missing(raw_dir: Path, all_names: list[str]) -> list[str]:
+    """Compare all_names against raw_dir/<slug>.json status files from a
+    prior run of the same layer+date; returns names that either never got a
+    status file (submit-phase error) or ended in a non-success status."""
+    slug_to_name = {slugify(n): n for n in all_names}
+    todo = []
+    for name in all_names:
+        slug = slugify(name)
+        status_path = raw_dir / f"{slug}.json"
+        if not status_path.exists():
+            todo.append(name)
+            continue
+        try:
+            status = json.loads(status_path.read_text())
+        except json.JSONDecodeError:
+            todo.append(name)
+            continue
+        if status.get("status") != "success":
+            todo.append(name)
+    return todo
+
+
 def run_layer(
     layer: str,
     *,
     limit: int | None,
     end_date: str | None,
-    submit_concurrency: int = 4,
+    max_in_flight: int = DEFAULT_MAX_IN_FLIGHT,
+    retry_failed: bool = False,
 ) -> None:
     if layer not in LAYERS:
         raise SystemExit(f"unknown layer {layer!r}, expected one of {list(LAYERS)}")
@@ -190,61 +188,99 @@ def run_layer(
 
     geojson_path = PROCESSED_DIR / f"{layer}.json"
     gdf = gpd.read_file(geojson_path)
-    names = gdf["name"].tolist()
-    if limit:
-        names = names[:limit]
+    all_names = gdf["name"].tolist()
 
     run_date = end_date or time.strftime("%Y-%m-%d")
     raw_dir = RAW_OUT_DIR / layer / run_date
     extracted_dir = EXTRACTED_OUT_DIR / layer / run_date
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    # Phase 1: submit every polygon (async), a handful at a time.
-    print(f"Submitting {len(names)} report(s) for {layer} ({submit_concurrency} at a time)...", file=sys.stderr)
-    jobs: dict[str, dict] = {}
-    name_by_slug: dict[str, str] = {}
+    if retry_failed:
+        names = _previously_failed_or_missing(raw_dir, all_names)
+        print(f"--retry-failed: {len(names)}/{len(all_names)} still need a successful report for {run_date}", file=sys.stderr)
+    else:
+        names = all_names
+    if limit:
+        names = names[:limit]
+    if not names:
+        print("Nothing to do.", file=sys.stderr)
+        return
 
-    def _submit_one(name: str):
+    print(f"Processing {len(names)} report(s) for {layer}, up to {max_in_flight} in flight at once...", file=sys.stderr)
+
+    to_submit = list(names)
+    in_flight: dict[str, dict] = {}  # slug -> {"name":..., "status_link":..., "report_link":..., "submitted_at":...}
+    done = 0
+    total = len(names)
+
+    def _submit_next() -> None:
+        name = to_submit.pop(0)
         slug = slugify(name)
-        job = submit_report(
-            asset_id=asset_id,
-            site_name=name,
-            filter_value=name,
-            filter_by="name",
-            api_key=api_key,
-            user_email=user_email,
-            end_date=end_date,
-        )
-        return slug, name, job
+        try:
+            job = submit_report(
+                asset_id=asset_id,
+                site_name=name,
+                filter_value=name,
+                filter_by="name",
+                api_key=api_key,
+                user_email=user_email,
+                end_date=end_date,
+            )
+        except requests.HTTPError as e:
+            nonlocal done
+            done += 1
+            body = e.response.text[:300] if e.response is not None else str(e)
+            print(f"  [{done}/{total}] SUBMIT ERROR for {name!r}: {e} -- {body}", file=sys.stderr)
+            (raw_dir / f"{slug}.json").write_text(json.dumps({"status": "submit_error", "message": body}, indent=2))
+            return
+        if not job.get("status_link"):
+            done += 1
+            print(f"  [{done}/{total}] SUBMIT WARNING: no status_link for {name!r}", file=sys.stderr)
+            (raw_dir / f"{slug}.json").write_text(json.dumps({"status": "submit_error", "message": "no status_link"}, indent=2))
+            return
+        in_flight[slug] = {"name": name, "status_link": job["status_link"], "report_link": job.get("report_link"), "submitted_at": time.time()}
+        print(f"  submitted {name!r} -> {slug} ({len(in_flight)} in flight)", file=sys.stderr)
 
-    with ThreadPoolExecutor(max_workers=submit_concurrency) as pool:
-        futures = [pool.submit(_submit_one, name) for name in names]
-        for i, fut in enumerate(as_completed(futures), 1):
+    while to_submit or in_flight:
+        while to_submit and len(in_flight) < max_in_flight:
+            _submit_next()
+
+        for slug, job in list(in_flight.items()):
             try:
-                slug, name, job = fut.result()
-            except requests.HTTPError as e:
-                print(f"  [{i}/{len(names)}] SUBMIT ERROR: {e} -- {e.response.text[:300]}", file=sys.stderr)
+                r = requests.get(job["status_link"], timeout=30)
+            except requests.RequestException as e:
+                print(f"  [{slug}] status check failed: {e}", file=sys.stderr)
                 continue
-            name_by_slug[slug] = name
-            jobs[slug] = job
-            print(f"  [{i}/{len(names)}] submitted {name!r} -> {slug}", file=sys.stderr)
+            if r.status_code != 200:
+                if time.time() - job["submitted_at"] > JOB_TIMEOUT_S:
+                    status = {"status": "timeout"}
+                else:
+                    continue
+            else:
+                status = r.json()
+                if status.get("status") in IN_PROGRESS_STATUSES:
+                    if time.time() - job["submitted_at"] > JOB_TIMEOUT_S:
+                        status = {"status": "timeout"}
+                    else:
+                        continue
 
-    # Phase 2: poll until each job finishes (or times out).
-    print(f"Polling {len(jobs)} job(s) for completion...", file=sys.stderr)
-    final = poll_all(jobs)
+            done += 1
+            (raw_dir / f"{slug}.json").write_text(json.dumps(status, indent=2))
+            del in_flight[slug]
 
-    # Phase 3: download + extract whatever succeeded.
-    for slug, status in final.items():
-        (raw_dir / f"{slug}.json").write_text(json.dumps(status, indent=2))
-        if status.get("status") != "success":
-            print(f"  WARNING: {name_by_slug.get(slug, slug)!r} ended with status {status.get('status')!r}: "
-                  f"{status.get('message')}", file=sys.stderr)
-            continue
-        zip_url = status.get("report_link") or jobs[slug].get("report_link")
-        if not zip_url:
-            print(f"  WARNING: no report_link for {slug!r}; inspect {raw_dir / f'{slug}.json'}", file=sys.stderr)
-            continue
-        download_and_extract(zip_url, extracted_dir / slug)
+            if status.get("status") == "success":
+                zip_url = status.get("report_link") or job.get("report_link")
+                if zip_url:
+                    try:
+                        download_and_extract(zip_url, extracted_dir / slug)
+                    except requests.RequestException as e:
+                        print(f"  [{done}/{total}] DOWNLOAD ERROR for {job['name']!r}: {e}", file=sys.stderr)
+                print(f"  [{done}/{total}] {job['name']!r} success", file=sys.stderr)
+            else:
+                print(f"  [{done}/{total}] {job['name']!r} ended with status {status.get('status')!r}: {status.get('message')}", file=sys.stderr)
+
+        if to_submit or in_flight:
+            time.sleep(POLL_INTERVAL_S)
 
 
 def main() -> None:
@@ -252,9 +288,16 @@ def main() -> None:
     parser.add_argument("--layer", required=True, choices=list(LAYERS))
     parser.add_argument("--limit", type=int, default=None, help="only process the first N features (smoke test)")
     parser.add_argument("--end-date", default=None, help="YYYY-MM-DD; defaults to today (snaps to nearest available pentad)")
-    parser.add_argument("--submit-concurrency", type=int, default=4, help="parallel submit requests")
+    parser.add_argument("--max-in-flight", type=int, default=DEFAULT_MAX_IN_FLIGHT, help="max concurrently-running jobs")
+    parser.add_argument("--retry-failed", action="store_true", help="only (re)process names missing a successful report for --end-date (or today)")
     args = parser.parse_args()
-    run_layer(args.layer, limit=args.limit, end_date=args.end_date, submit_concurrency=args.submit_concurrency)
+    run_layer(
+        args.layer,
+        limit=args.limit,
+        end_date=args.end_date,
+        max_in_flight=args.max_in_flight,
+        retry_failed=args.retry_failed,
+    )
 
 
 if __name__ == "__main__":

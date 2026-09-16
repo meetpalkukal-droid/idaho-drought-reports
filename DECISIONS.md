@@ -7,7 +7,24 @@ current setup/usage instructions.
 
 ## Open items
 
-- [ ] Full batch run for both layers (363 polygons) — in progress.
+- [x] Full batch run for both layers (363 polygons), 2026-09-16 cycle:
+      **333/363 (91.7%) succeeded** — 13/13 groundwater districts, 320/350
+      irrigation organizations. The remaining 30 irrigation organizations
+      failed identically across two `--retry-failed` passes (i.e. not
+      transient) — see the two decisions below for the breakdown and next
+      steps.
+- [ ] 22 irrigation organizations persistently fail with a server-side
+      `'coordinates'` error, unchanged across 2 retries (list in the
+      decision below). Next experiment if revisited: try `simplify_geometry`
+      on just these polygons, since several are large multi-part entities
+      (Twin Falls Canal Company, North Side Canal Company, Boise Project
+      Board of Control, Fremont-Madison Irrigation District, ...).
+- [ ] 8 irrigation organizations persistently get "No valid long-term
+      drought blend pixels" / "No valid USDM pixels" for their AOI —
+      polygons too small relative to gridMET's 4km grid. Not fixable by
+      retrying or by `simplify_geometry`; needs a content decision later
+      (exclude from the site with an explanatory note, or find a workaround
+      like a small buffer around the polygon).
 - [ ] Create the GitHub remote (personal account) and push.
 - [ ] Add repo secrets (`CE_API_KEY`, `GW_ASSET_ID`, `IRR_ASSET_ID`) and
       enable GitHub Pages (source = GitHub Actions) once pushed.
@@ -17,13 +34,111 @@ current setup/usage instructions.
       explanations per drought index; decide whether to rebuild the
       long-term time series chart ourselves from `ltb_eoy_timeseries.csv`
       (1985(ish)-present) rather than using Climate Engine's own chart image.
-- [ ] Confirm real per-cycle wall-clock time and any Earth Engine
-      concurrency/quota friction at full 363-polygon scale (only tested
-      with `--submit-concurrency 4` on 1 polygon so far).
+- [ ] `DEFAULT_MAX_IN_FLIGHT = 15` in `fetch_reports.py` is a conservative
+      starting guess, not a confirmed-safe ceiling — worth tuning upward
+      once the pipeline is running unattended reliably, to cut wall-clock
+      time per cycle.
 - [ ] Verify the GitHub Actions daily-cron + `state.json` cadence gate
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### The built site is never committed to git; only `state.json` is
+**Decision:** `.gitignore` now excludes all of `site/` except
+`site/assets/` (hand-authored CSS). The GitHub Actions workflow only
+`git add`s `data/reports/state.json` to decide whether anything ran this
+cycle, and deploys `site/` to GitHub Pages via `actions/upload-pages-artifact`
+straight from the runner's local filesystem, not from a git commit.
+**Why:** Caught before it caused damage, but worth recording: the first
+full 333-polygon `build_site.py` run produced **548MB across 7,012 files**
+in `site/`. Committing that to git every 5 days would balloon the repo by
+tens of GB per year, since git retains every historical blob version
+forever (unlike a deploy artifact, which is naturally ephemeral). The
+`actions/upload-pages-artifact` + `actions/deploy-pages` steps were already
+in the workflow from the start and don't need git involved at all --
+`site/` is entirely a reproducible build artifact of
+`data/reports/extracted/`, which is itself entirely reproducible from the
+API, so there's nothing to lose by never persisting either in git.
+**How to apply:** Don't add new generated output under `site/` to git even
+for convenience/debugging -- if something there needs to survive between
+Actions runs, it belongs in `data/reports/state.json` or a similarly small,
+deliberately-tracked file, not by committing the site itself.
+
+### Submission is throttled to a max number of concurrently-running jobs, with automatic retry
+**Decision:** `fetch_reports.py` now submits with a sliding window
+(`--max-in-flight`, default 15): it only submits a new polygon once an
+earlier one has finished, rather than firing off every polygon at once. It
+also writes a status file per polygon (`data/reports/raw/<layer>/<date>/<slug>.json`)
+regardless of outcome (including submit-phase errors), and a `--retry-failed`
+flag reprocesses only polygons missing a `status: "success"` file for that
+date. `run_pipeline.py` now runs one automatic retry pass per layer after
+the main pass.
+**Why:** The first full production-scale run (350 irrigation organizations,
+submitted with only a 4-thread HTTP submit pool and no cap on concurrently
+*running* jobs) put ~183 jobs in flight simultaneously and hit real,
+confirmed failures: 41 jobs failed with Earth Engine's own
+`"Too Many Requests: concurrency limit exceeded"` error
+(see https://developers.google.com/earth-engine/guides/usage#concurrent_interactive_requests),
+and Climate Engine's submit endpoint itself started rejecting further
+requests (with a misleading `404 "Endpoint Removed"` body, not a real
+deprecation) once ~186 submissions had gone out — almost certainly its own
+overload protection, not an actual API change. This resolved the
+"might need a quota bump someday" open item from the async-submission
+decision below into a confirmed, reproducible constraint.
+**How to apply:** If `--max-in-flight 15` still produces concurrency
+errors at full scale, lower it further; if a full cycle proves reliable and
+wall-clock time matters, raise it gradually rather than jumping back to
+unthrottled. Don't remove the retry pass even if throttling seems to fully
+fix concurrency errors -- 14 irrigation organizations failed on the first
+run with an unrelated server-side `'coordinates'` error, independent of
+concurrency (see next entry), and transient network errors are expected at
+some background rate regardless.
+
+### A server-side `'coordinates'` error persistently affects 22 geometrically complex entities
+**Decision:** No code fix attempted yet; tracked as an open item for a
+future session. These 350 - 30 = 320 successes are treated as the complete
+2026-09-16 irrigation-organizations cycle for now.
+**Why:** 22 of 350 irrigation organizations failed with a bare
+`Error: 'coordinates'` from Climate Engine's own report generator (fetched
+each failure's `error_link` for the full message — no stack trace beyond
+that), identically across two separate `--retry-failed` passes run minutes
+apart — i.e. confirmed persistent, not transient/concurrency-related (no
+"Too Many Requests" text). Affects some of Idaho's largest, most
+geometrically complex service areas: A & B Irrigation District, American
+Falls Reservoir Dist #2, Big Wood Canal Company, Boise Kuna Irrigation
+District, Boise Project Board of Control, Cambridge Ditch Co, Canyon Creek
+Canal Co Inc, Eastern Idaho Water Co, East Greenacres Irrigation District,
+Egin Bench Canals Inc, Farmers Cooperative Ditch Co, Fremont-Madison
+Irrigation District, Granite Twin Lakes Water Users, Lost Valley Reservoir
+Co, New York Irrigation District, North Side Canal Company Ltd, Salmon
+River Canal Co Ltd, Settlers Irrigation District, Thurman Mill Ditch Co
+Ltd, Twin Falls Canal Company, Upper Wood River Water Users Assn, Wilder
+Irrigation District, Wood River Valley Irrigation District — strongly
+suggests a bug in Climate Engine's handling of complex (likely
+multi-part/scattered-parcel) geometries rather than anything on our end.
+**How to apply:** Next experiment if revisited: try `simplify_geometry`
+(the API exposes a maxError-in-meters param we haven't used yet) on just
+these 22 polygons. If that doesn't help, it's worth an email to Climate
+Engine support with a specific site name + its `error_link` (each one's
+saved in `data/reports/raw/irrigation_organizations/2026-09-16/<slug>.json`).
+
+### 8 irrigation organizations have no valid drought-index pixels for their AOI
+**Decision:** No fix attempted; these are excluded from the 2026-09-16
+cycle's output. Needs a content/design decision later, not a pipeline fix.
+**Why:** Colson Creek Irrigation Co, Deer Park Water Assn Inc, Lindsey
+Creek Water Assn Inc, Reflection Ridge Estates Water Association, Secluded
+Acres Estates Water Assn, The Lone Spring Water Co Ltd, Williams Irrigation
+Co, and one more failed with "No valid long-term drought blend pixels were
+found" / "No valid USDM pixels were found for the submitted AOI and mask
+settings" — persistent across retries. gridMET Drought is a 4km-resolution
+grid; these are likely small polygons that don't overlap a valid pixel
+center, not a bug.
+**How to apply:** When doing site design, decide how to handle these:
+options include a small buffer around the polygon before querying (changes
+what "the report" represents, so worth a deliberate choice, not a silent
+pipeline tweak), or simply noting on the site that a jurisdiction is too
+small for gridMET's resolution and pointing users to the nearest larger
+enclosing district's report instead.
 
 ### Site content will exclude Climate Engine's bundled PDF/report.png
 **Decision:** `build_site.py` skips `reports/report.pdf` and
