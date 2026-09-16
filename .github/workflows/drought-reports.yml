@@ -42,9 +42,9 @@ jobs:
       - name: Run pipeline
         env:
           CE_API_KEY: ${{ secrets.CE_API_KEY }}
-          CE_USER_EMAIL: ${{ secrets.CE_USER_EMAIL }}
           GW_ASSET_ID: ${{ secrets.GW_ASSET_ID }}
           IRR_ASSET_ID: ${{ secrets.IRR_ASSET_ID }}
+          # CE_USER_EMAIL intentionally not set here -- see fetch_reports.py docstring.
         run: |
           ARGS=""
           if [ "${{ github.event.inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi

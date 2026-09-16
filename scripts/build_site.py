@@ -107,7 +107,7 @@ def build(run_date: str) -> None:
         layer_site_dir.mkdir(parents=True, exist_ok=True)
         layer_data_dir.mkdir(parents=True, exist_ok=True)
 
-        gdf = gpd.read_file(PROCESSED_DIR / f"{layer}.geojson")
+        gdf = gpd.read_file(PROCESSED_DIR / f"{layer}.json")
         slug_to_name = {}
         import re
         for name in gdf["name"]:

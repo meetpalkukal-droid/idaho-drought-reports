@@ -20,12 +20,16 @@ Part of the "Diagnosing Water User Response to the 2026 Drought" project
 1. Register for a free non-commercial Google Earth Engine account and create a Google Cloud Project for it.
 2. Enable the Earth Engine API on that project.
 3. Link the project to Climate Engine at https://users.climateengine.org/v1/ee_auth to get your API key (valid 60 days, renewable) — this also routes your usage through your own EE project instead of Climate Engine's shared, rate-limited pool.
-4. Upload `data/processed/groundwater_districts.geojson` and `data/processed/irrigation_organizations.geojson` as Earth Engine table assets (code.earthengine.google.com → Assets → New → Table Upload), then set each asset's sharing to "Anyone can read" and copy its asset ID.
+4. Upload `data/processed/groundwater_districts.zip` and `data/processed/irrigation_organizations.zip` (zipped shapefiles — Earth Engine's Table Upload only accepts shp/zip/dbf/prj/shx/cpg, not GeoJSON) as Earth Engine table assets (code.earthengine.google.com → Assets → New → Table Upload), then set each asset's sharing to "Anyone can read" and copy its asset ID.
 5. In the GitHub repo settings, add these Actions secrets:
    - `CE_API_KEY`
-   - `CE_USER_EMAIL`
    - `GW_ASSET_ID` (groundwater districts asset)
    - `IRR_ASSET_ID` (irrigation organizations asset)
+
+   Do **not** add a `CE_USER_EMAIL` secret for scheduled runs — Climate Engine
+   emails a copy of every report to that address, so setting it here would
+   mean one email per polygon, every run (363 emails per cycle). We already
+   get the report zip link directly in the API response.
 6. Enable GitHub Pages for this repo with source = "GitHub Actions".
 
 ## Running locally
@@ -35,23 +39,47 @@ pip install -r requirements.txt
 python scripts/prep_boundaries.py          # only needed when the source shapefiles change
 
 set CE_API_KEY=...            # or export on macOS/Linux
-set CE_USER_EMAIL=...
 set GW_ASSET_ID=...
 set IRR_ASSET_ID=...
 python scripts/run_pipeline.py --force --limit 1   # smoke test: 1 feature per layer
 python scripts/run_pipeline.py --force             # full run, all 363 polygons
 ```
 
-## Known open item
+## Confirmed API behavior (from a real test call)
 
-The Climate Engine Reports API does not publish a response schema for
-`/reports/drought/feature_collection` (its OpenAPI spec leaves the 200
-response body untyped), so the exact JSON shape and report-zip contents are
-unconfirmed. `fetch_reports.py` parses the response defensively (scans for
-any URL ending in `.zip`) and `build_site.py` discovers whatever
-images/CSVs the zip contained rather than assuming fixed filenames. Once a
-real API key is available, run the `--limit 1` smoke test above, inspect
-`data/reports/raw/<layer>/<date>/<slug>.json` and the extracted zip
-contents, and tighten both scripts to pick out the specific current-
-conditions map / summary table / time-series chart per the narrative, and
-to add plain-language interpretation text per index.
+- Auth: `Authorization: <raw API key>` header (no `Bearer` prefix).
+- Request: `POST` with a JSON body (not query params, despite some doc
+  pages implying otherwise) — see `ReportDroughtFeatureCollection` /
+  `ReportDroughtCoordinates` in `https://api.climateengine.org/openapi.json`
+  for the authoritative schema.
+- `sub_choices` is a single string, not a list — one API call generates a
+  report for **one** polygon, selected via `filter_by`/`sub_choices`
+  against a property on the FeatureCollection (we use `name`). There is no
+  single call that generates reports for an entire shapefile at once.
+- Successful response: `{"Data": {"Report link": "<url to .zip>", ...}}`.
+  `fetch_reports.py`'s `_find_zip_urls` still scans defensively for any
+  `.zip` URL rather than hard-coding this key, in case the shape varies
+  between `synchronous`/batch modes.
+- Report zip contents: `images/` (14 PNGs — USDM map, short-term/long-term
+  blend maps + summary tables, gridMET climate summaries), `data/` (6 CSVs:
+  `stb_`/`ltb_`/`dm_` class-histogram time series over the last ~390 days
+  at their native cadence, `gm_` combined climate variables since 1986,
+  `ltb_eoy_` one value per year since ~1986 — this is the "1985–present"
+  series from the narrative), `reports/report.pdf` + `report.png` (the
+  bundled PDF we are intentionally NOT using), and a `README.md` inside the
+  zip documenting every CSV's columns and drought-class thresholds (D0–D4 /
+  c0–c10) — see a saved copy's contents for the exact schema before writing
+  any chart code against these CSVs.
+
+## Open item: per-polygon call volume
+
+Because each API call is scoped to a single polygon, a full cycle needs 363
+sequential calls (13 + 350). A synchronous (`batch=False`) call to compute
+one district's full report was timed at several minutes — likely too slow
+run sequentially for 363 sites within a reasonable pipeline window. Before
+finishing `fetch_reports.py` for production use, confirm actual per-call
+timing for both `batch=False` and `batch=True` (async) modes and, if
+needed, switch to firing `batch=True` requests and polling/waiting before
+download, or parallelizing calls (mind Climate Engine's per-hour quota even
+though the shared daily/monthly caps no longer apply once your own GEE
+project is linked).
