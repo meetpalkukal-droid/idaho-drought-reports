@@ -3,8 +3,12 @@ __pycache__/
 .venv/
 venv/
 
-# Downloaded Climate Engine report payloads (raw zips) — regenerated each cycle
+# Downloaded/extracted Climate Engine report payloads — regenerated each
+# cycle straight from the API; only site/ (the built output) is committed.
+# state.json is the exception: it's tracked so the 5-day cadence check
+# survives across separate GitHub Actions runs.
 data/reports/raw/
+data/reports/extracted/
 
 # Local secrets
 .env

@@ -65,8 +65,11 @@ IN_PROGRESS_STATUSES = {"running", "pending", "queued", "in_progress", "started"
 
 
 def slugify(name: str) -> str:
+    # Climate Engine rejects site_name longer than 35 characters (confirmed
+    # via a real 422 response). Verified this doesn't create collisions
+    # across either of our 13/350-feature layers before relying on it.
     slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_")
-    return slug[:80]
+    return slug[:35]
 
 
 def submit_report(
@@ -185,7 +188,7 @@ def run_layer(
     if not asset_id or not api_key:
         raise SystemExit(f"missing required env vars: need CE_API_KEY and {asset_env}")
 
-    geojson_path = PROCESSED_DIR / f"{layer}.geojson"
+    geojson_path = PROCESSED_DIR / f"{layer}.json"
     gdf = gpd.read_file(geojson_path)
     names = gdf["name"].tolist()
     if limit:

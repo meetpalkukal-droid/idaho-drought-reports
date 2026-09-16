@@ -20,6 +20,8 @@ from pathlib import Path
 
 import geopandas as gpd
 
+from fetch_reports import slugify
+
 ROOT = Path(__file__).resolve().parent.parent
 PROCESSED_DIR = ROOT / "data" / "processed"
 EXTRACTED_DIR = ROOT / "data" / "reports" / "extracted"
@@ -108,11 +110,7 @@ def build(run_date: str) -> None:
         layer_data_dir.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(PROCESSED_DIR / f"{layer}.json")
-        slug_to_name = {}
-        import re
-        for name in gdf["name"]:
-            slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_")[:80]
-            slug_to_name[slug] = name
+        slug_to_name = {slugify(name): name for name in gdf["name"]}
 
         index_items = []
         for site_dir in sorted(layer_extracted_dir.iterdir()):
@@ -124,7 +122,11 @@ def build(run_date: str) -> None:
             dest_dir = layer_data_dir / slug
             if dest_dir.exists():
                 shutil.rmtree(dest_dir)
-            shutil.copytree(site_dir, dest_dir)
+            # Skip reports/ (Climate Engine's bundled PDF + a rendered PNG of
+            # that same PDF) and the CSV-schema README -- per the project
+            # narrative we build our own reports from the graphics/data, not
+            # Climate Engine's PDF.
+            shutil.copytree(site_dir, dest_dir, ignore=shutil.ignore_patterns("reports", "README.md"))
 
             images, csvs = [], []
             for f in sorted(dest_dir.rglob("*")):
