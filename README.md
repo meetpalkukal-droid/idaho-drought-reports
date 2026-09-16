@@ -6,6 +6,9 @@ API and updated every 5 days (matching the gridMET Drought pentad cadence).
 Part of the "Diagnosing Water User Response to the 2026 Drought" project
 (see `UI_Kukal_Narrative.pdf`, Objective 2).
 
+See `DECISIONS.md` for the running log of why things are built the way they
+are, and what's still open.
+
 ## Layout
 
 - `Groundwater_Districts/`, `Irrigation_Organizations/` — source shapefiles (NAD83 Idaho TM), as provided.
