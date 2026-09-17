@@ -50,6 +50,27 @@ MAP_CARDS = [
     ("ltb_map", "Long-Term Conditions", "Blends PDSI, the Z-Index, and 6-month to 5-year SPI -- reflects accumulated conditions."),
 ]
 
+# The remaining 11 of Climate Engine's 14 report graphics (everything except
+# the 3 maps above, which are pure raster/no underlying data). Shown in
+# full per the project's instruction not to skip any Climate Engine
+# graphic, even though several (the *_table images) duplicate what the
+# hand-built blend-summary bars above already show, and *_wy_precip_eto and
+# *_long_term_trends are annual statistics rather than the ~390-day window
+# most of this page focuses on.
+ADDITIONAL_GRAPHICS = [
+    ("dm_table", "U.S. Drought Monitor -- Class Table", "Climate Engine's own table for the USDM snapshot shown above."),
+    ("stb_table", "Short-Term Blend -- Class Table", "Climate Engine's own table for the short-term conditions shown above."),
+    ("ltb_table", "Long-Term Blend -- Class Table", "Climate Engine's own table for the long-term conditions shown above."),
+    ("ltb_eoy_timeseries", "Long-Term Blend -- Historical Trend (Climate Engine version)", "Climate Engine's own rendering of the same 1986-present series charted interactively above."),
+    ("gm_eto_rate", "Reference Evapotranspiration (ETo) Rate", "This year's daily evaporative demand vs. the historical normal range."),
+    ("gm_precip_cum", "Cumulative Precipitation", "This water year's running precipitation total vs. the historical normal range."),
+    ("gm_temp_summary", "Temperature Summary", "This year's high/low/mean temperature vs. the long-term average."),
+    ("gm_tmean_rate", "Mean Temperature", "This year's daily mean temperature vs. the historical normal range."),
+    ("gm_wb_summary", "Water Balance Summary", "This year's precipitation and evaporative demand vs. average, with percentile rank."),
+    ("gm_wy_precip_eto_trends", "Water-Year Precipitation & ETo Trends", "Annual precipitation and evaporative demand totals since 1981, with trend lines."),
+    ("gm_long_term_trends", "Long-Term Climate Trends", "Statistical trend per decade and significance for temperature, precipitation, and ETo."),
+]
+
 PAGE_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
@@ -74,6 +95,12 @@ PAGE_TEMPLATE = """<!doctype html>
 <p class="meta">Long-term drought blend index, one value per water year. Hover or tab through a point for its exact value.</p>
 <div class="chart-wrap">
 {chart_svg}
+</div>
+
+<h2>All Climate Engine graphics</h2>
+<p class="meta">Every graphic from this report's underlying Climate Engine data, including the ones synthesized above.</p>
+<div class="map-grid">
+{additional_graphics}
 </div>
 
 {explainer}
@@ -134,18 +161,18 @@ def _find_image(dest_dir: Path, prefix: str) -> Path | None:
     return matches[0] if matches else None
 
 
-def _render_map_cards(dest_dir: Path, layer: str, slug: str) -> str:
+def _render_image_cards(dest_dir: Path, layer: str, slug: str, specs: list[tuple[str, str, str]]) -> str:
     cards = []
-    for prefix, title, caption in MAP_CARDS:
+    for prefix, title, caption in specs:
         img = _find_image(dest_dir, prefix)
         if not img:
             continue
         rel = f"../data/{layer}/{slug}/images/{img.name}"
         cards.append(
-            f'<div class="map-card"><figure><img src="{rel}" alt="{title} map" loading="lazy">'
+            f'<div class="map-card"><figure><img src="{rel}" alt="{title}" loading="lazy">'
             f'<figcaption><strong>{title}.</strong> {caption}</figcaption></figure></div>'
         )
-    return "\n".join(cards) or "<p>No current-conditions maps available for this report.</p>"
+    return "\n".join(cards)
 
 
 def _render_class_bar(pct: dict, classes) -> str:
@@ -275,9 +302,10 @@ def build(run_date: str) -> None:
                 layer_title_lower=layer_title.lower(),
                 run_date=run_date,
                 disclosure=_find_geometry_fallback_note(raw_dir, slug),
-                map_cards=_render_map_cards(dest_dir, layer, slug),
+                map_cards=_render_image_cards(dest_dir, layer, slug, MAP_CARDS) or "<p>No current-conditions maps available for this report.</p>",
                 blend_sections=blend_sections,
                 chart_svg=chart_svg,
+                additional_graphics=_render_image_cards(dest_dir, layer, slug, ADDITIONAL_GRAPHICS) or "<p>No additional graphics available for this report.</p>",
                 explainer=EXPLAINER_HTML,
                 csv_links=csv_links or "<li>No data files available.</li>",
             )
