@@ -68,26 +68,14 @@ MAP_CARDS = [
     ("ltb_map", "Long-Term Conditions", "Blends PDSI, the Z-Index, and 6-month to 5-year SPI -- reflects accumulated conditions."),
 ]
 
-# The remaining 11 of Climate Engine's 14 report graphics (everything except
-# the 3 maps above, which are pure raster/no underlying data). Shown in
-# full per the project's instruction not to skip any Climate Engine
-# graphic, even though several (the *_table images) duplicate what the
-# hand-built blend-summary bars above already show, and *_wy_precip_eto and
-# *_long_term_trends are annual statistics rather than the ~390-day window
-# most of this page focuses on.
-ADDITIONAL_GRAPHICS = [
-    ("dm_table", "U.S. Drought Monitor -- Class Table", "Climate Engine's own table for the USDM snapshot shown above."),
-    ("stb_table", "Short-Term Blend -- Class Table", "Climate Engine's own table for the short-term conditions shown above."),
-    ("ltb_table", "Long-Term Blend -- Class Table", "Climate Engine's own table for the long-term conditions shown above."),
-    ("ltb_eoy_timeseries", "Long-Term Blend -- Historical Trend (Climate Engine version)", "Climate Engine's own rendering of the same 1986-present series charted interactively in Climate Context below."),
-    ("gm_eto_rate", "Reference ETo Rate (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
-    ("gm_precip_cum", "Cumulative Precipitation (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
-    ("gm_temp_summary", "Temperature Summary (Climate Engine version)", "Climate Engine's own table for the same statistics shown interactively below."),
-    ("gm_tmean_rate", "Mean Temperature (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
-    ("gm_wb_summary", "Water Balance Summary (Climate Engine version)", "Climate Engine's own table for the same statistics shown interactively below."),
-    ("gm_wy_precip_eto_trends", "Water-Year Precipitation & ETo Trends (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
-    ("gm_long_term_trends", "Long-Term Climate Trends (Climate Engine version)", "Climate Engine's own table for the same trend statistics shown interactively below."),
-]
+SITE_NAME = "Idaho Water User Drought Reports"
+
+HEADER_TEMPLATE = """<header class="site-header">
+<div class="wide">
+<div><a href="{home_href}"><span class="brand">{site_name}</span></a><div class="tagline">Drought conditions for Idaho water users, updated every 5 days</div></div>
+{nav}
+</div>
+</header>"""
 
 PAGE_TEMPLATE = """<!doctype html>
 <html lang="en">
@@ -99,11 +87,17 @@ PAGE_TEMPLATE = """<!doctype html>
 {bokeh_cdn}
 </head>
 <body>
-<nav><a href="../index.html">&larr; All {layer_title}</a></nav>
+{header}
+<main><div class="wide">
 <h1>{name}</h1>
-<p class="meta">Report period ending {run_date} &middot; updated every 5 days from Climate Engine's gridMET Drought data.</p>
+<p class="meta">{layer_title} &middot; report period ending {run_date} &middot; updated every 5 days from Climate Engine's gridMET Drought data.</p>
 {disclosure}
+<div class="intro-note">
+<p>This page summarizes how dry or wet conditions have been for <strong>{name}</strong> recently and over the long term, using drought indices computed from weather-station-based climate data (not a direct measurement of soil moisture or streamflow, but a well-established standard way to track drought). Everything on this page updates automatically every 5 days.</p>
+</div>
+
 <h2>Current conditions</h2>
+<p class="meta section-intro">Three maps of this area's current drought status, each looking at a different time window.</p>
 <div class="map-grid">
 {map_cards}
 </div>
@@ -111,7 +105,7 @@ PAGE_TEMPLATE = """<!doctype html>
 {blend_sections}
 
 <h2>Drought class evolution</h2>
-<p class="meta">The full picture behind the 3 snapshots above -- not something Climate Engine's own report shows at all. Interactive -- hover for the exact class breakdown on any date.</p>
+<p class="meta section-intro">How the drought classification above has changed continuously over roughly the last 13 months, not just the 3 snapshots above. Hover anywhere on a chart for the exact breakdown on that date.</p>
 <div class="bokeh-grid">
 <div class="bokeh-chart">{stb_evolution_div}</div>
 <div class="bokeh-chart">{ltb_evolution_div}</div>
@@ -119,11 +113,11 @@ PAGE_TEMPLATE = """<!doctype html>
 </div>
 
 <h2>Long-term trend (1986&ndash;present)</h2>
-<p class="meta">Long-term drought blend index, one value per water year. Interactive -- hover a point for its exact value, scroll to zoom.</p>
+<p class="meta section-intro">The long-term drought blend index for every water year back to 1986 &mdash; one number per year summarizing how that year compared to normal. Positive/blue is wetter than normal, negative/red is drier. Hover a point for its exact value; scroll to zoom.</p>
 <div class="bokeh-chart">{ltb_chart_div}</div>
 
 <h2>Climate context</h2>
-<p class="meta">Rebuilt from the same climate data Climate Engine's own report graphics use (see "All Climate Engine graphics" below for their versions) -- interactive, hover for exact values.</p>
+<p class="meta section-intro">The raw climate data behind the drought indices above: evaporative demand (how thirsty the atmosphere is), precipitation, and temperature, each compared against this area's own historical normal range. Interactive &mdash; hover for exact values.</p>
 <div class="bokeh-grid">
 <div class="bokeh-chart">{eto_chart_div}</div>
 <div class="bokeh-chart">{precip_chart_div}</div>
@@ -133,19 +127,16 @@ PAGE_TEMPLATE = """<!doctype html>
 {summary_tables}
 {trend_table}
 
-<h2>All Climate Engine graphics</h2>
-<p class="meta">Every graphic from this report's underlying Climate Engine data, including the ones rebuilt as interactive charts above.</p>
-<div class="map-grid">
-{additional_graphics}
-</div>
-
 {explainer}
 
 <h2>Data</h2>
+<p class="meta section-intro">Download the raw numbers behind every chart on this page.</p>
 <ul class="data-links">
 {csv_links}
 </ul>
 
+<p class="footer-note">Built by the University of Idaho as part of a statewide drought-response project. Not an official regulatory product &mdash; for planning and awareness, not a substitute for your water right, delivery call, or mitigation plan records.</p>
+</div></main>
 {bokeh_script}
 </body>
 </html>
@@ -160,13 +151,15 @@ INDEX_TEMPLATE = """<!doctype html>
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
-<nav><a href="../index.html">&larr; Home</a></nav>
+{header}
+<main><div class="wide">
 <h1>{layer_title}</h1>
 <p class="meta">{count} {layer_title_lower}, updated every 5 days.</p>
 <input class="search-box" type="search" placeholder="Search by name&hellip;" aria-label="Search {layer_title_lower}">
 <ul class="entry-list">
 {items}
 </ul>
+</div></main>
 <script src="../assets/search.js"></script>
 </body>
 </html>
@@ -177,19 +170,50 @@ HOME_TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Idaho Water User Drought Reports</title>
+<title>{site_name}</title>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 </head>
 <body>
-<h1>Idaho Water User Drought Reports</h1>
-<p>Tailored, jurisdiction-specific drought conditions for Idaho irrigation organizations and groundwater districts &mdash; built on Climate Engine's gridMET Drought data, updated every 5 days.</p>
+{header}
+<main><div class="wide">
+<div class="hero">
+<h1>{site_name}</h1>
+<p class="lede">Tailored, jurisdiction-specific drought conditions for {gw_count} Idaho groundwater districts and {irr_count} irrigation organizations &mdash; built on Climate Engine's gridMET Drought data, updated every 5 days.</p>
 <p class="meta">Report period ending {run_date}.</p>
-<div class="layer-cards">
-{cards}
 </div>
+
+<h2>Find your district or organization</h2>
+<input class="search-box" id="home-search" type="search" placeholder="Search by name&hellip;" aria-label="Search all districts and organizations">
+<ul id="home-search-results" hidden></ul>
+
+<div class="selector-tabs" role="tablist">
+<button class="selector-tab" role="tab" aria-selected="true" aria-controls="panel-map" data-tab="map">Map</button>
+<button class="selector-tab" role="tab" aria-selected="false" aria-controls="panel-list" data-tab="list">List</button>
+</div>
+<div class="selector-panel active" id="panel-map" role="tabpanel">
+<div class="map-legend">
+<span><span class="swatch" style="background:#1d5fa8"></span>Groundwater districts</span>
+<span><span class="swatch" style="background:#1baf7a"></span>Irrigation organizations</span>
+</div>
+<div id="home-map"></div>
+<p class="meta" style="margin-top:10px;">Click a boundary to open its report.</p>
+</div>
+<div class="selector-panel" id="panel-list">
+<div id="home-list"></div>
+</div>
+
+<p class="footer-note">Built by the University of Idaho as part of a statewide drought-response project.</p>
+</div></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="assets/home.js"></script>
 </body>
 </html>
 """
+
+
+def _render_header(*, home_href: str, nav_html: str = "") -> str:
+    return HEADER_TEMPLATE.format(home_href=home_href, site_name=SITE_NAME, nav=nav_html)
 
 
 def _find_image(dest_dir: Path, prefix: str) -> Path | None:
@@ -465,6 +489,7 @@ def build(run_date: str) -> None:
                 layer_title=layer_title,
                 layer_title_lower=layer_title.lower(),
                 run_date=run_date,
+                header=_render_header(home_href="../index.html", nav_html=f'<nav><a href="../index.html">&larr; All {layer_title}</a></nav>'),
                 disclosure=_find_geometry_fallback_note(raw_dir, slug),
                 map_cards=_render_image_cards(dest_dir, layer, slug, MAP_CARDS) or "<p>No current-conditions maps available for this report.</p>",
                 blend_sections=blend_sections,
@@ -479,7 +504,6 @@ def build(run_date: str) -> None:
                 wy_trend_chart_div=divs.get("wy_trend", "<p>No water-year trend data available.</p>"),
                 summary_tables=summary_tables_html,
                 trend_table=trend_table_html,
-                additional_graphics=_render_image_cards(dest_dir, layer, slug, ADDITIONAL_GRAPHICS) or "<p>No additional graphics available for this report.</p>",
                 explainer=EXPLAINER_HTML,
                 csv_links=csv_links or "<li>No data files available.</li>",
                 bokeh_script=bokeh_script,
@@ -493,21 +517,30 @@ def build(run_date: str) -> None:
                 layer_title_lower=layer_title.lower(),
                 count=len(index_items),
                 items="\n".join(index_items),
+                header=_render_header(home_href="../index.html", nav_html='<nav><a href="../index.html">&larr; Home</a></nav>'),
             ),
             encoding="utf-8",
         )
-        home_cards.append(
-            f'<div class="layer-card"><h2>{layer_title}</h2>'
-            f'<p>{len(index_items)} {layer_title.lower()} with current reports.</p>'
-            f'<a href="{layer}/index.html">Browse &rarr;</a></div>'
-        )
+        home_cards.append((layer, layer_title, len(index_items)))
 
+    SITE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    map_src = PROCESSED_DIR / "map_boundaries.json"
+    if map_src.exists():
+        shutil.copy(map_src, SITE_DATA_DIR / "map_boundaries.json")
+
+    counts = {layer: n for layer, _, n in home_cards}
     (SITE_DIR / "index.html").write_text(
-        HOME_TEMPLATE.format(run_date=run_date, cards="\n".join(home_cards)), encoding="utf-8"
+        HOME_TEMPLATE.format(
+            site_name=SITE_NAME,
+            run_date=run_date,
+            gw_count=counts.get("groundwater_districts", 0),
+            irr_count=counts.get("irrigation_organizations", 0),
+            header=_render_header(home_href="index.html", nav_html=""),
+        ),
+        encoding="utf-8",
     )
 
     manifest = {"run_date": run_date, "layers": list(LAYER_TITLES)}
-    SITE_DATA_DIR.mkdir(parents=True, exist_ok=True)
     (SITE_DATA_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
 

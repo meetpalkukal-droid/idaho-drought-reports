@@ -92,11 +92,17 @@ current setup/usage instructions.
 - [x] Continuous drought-class-evolution charts (stacked area, full
       ~390-day window) added -- the one thing Climate Engine's own report
       never shows at all, see "Add drought-class-evolution charts" commit.
+- [x] Full-width "modern sleek professional" redesign, homepage
+      map/search/list selector, and expanded lay-person explainer text --
+      see "Redesign: full-width layout + homepage selector + expanded lay
+      content" decision below. Visually QA'd in light mode, dark mode, and
+      mobile width (~500px) for both the homepage and a report page; no
+      bugs found.
 - [ ] Site design open items remaining: no live/interactive current-
       conditions map (the 3 hero maps are still Climate Engine's static
       PNGs -- rebuilding those would mean redoing raster/geospatial
       rendering ourselves, out of scope so far); no cross-report
-      comparison view beyond the new homepage selector map (see below).
+      comparison view beyond the new homepage selector map/search/list.
 - [ ] `DEFAULT_MAX_IN_FLIGHT = 15` in `fetch_reports.py` is a conservative
       starting guess, not a confirmed-safe ceiling — worth tuning upward
       once the pipeline is running unattended reliably, to cut wall-clock
@@ -105,6 +111,75 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Redesign: full-width layout + homepage selector + expanded lay content
+**Decision:** Combined user request: "use the full page not just the
+center column... give ample space to graphics and make it a theme that is
+modern sleek and professional... the website may be used by people who
+need larger text/graphics etc. delete 'All Climate Engine graphics'
+section. and add as much detail as possible for people (lay) to
+understand the results," plus a follow-up mid-turn ask to "give options on
+the main page to select spatial entity via a search bar, map itself, and a
+list." Implemented as:
+  - `site/assets/style.css` rewritten: Inter (Google Fonts) at an 18px
+    base (`html { font-size: 112.5% }`) for readability by users who need
+    larger text; a `.wide` (1400px) layout class replacing the old
+    centered-column container, with prose-width (`760px`) kept only on
+    actual reading blocks (glossary, disclosures, intro/section text) so
+    long lines of body text stay readable inside the wider page; a navy
+    (`#0f2e4c`) header/nav; card treatment (shadow, radius, padding) on
+    maps, summaries, charts, tables; wider grid minmax on map/chart grids
+    ("ample space to graphics"); full dark-mode token block. The validated
+    `--dc-c0`..`--dc-c10` diverging drought palette values were kept
+    unchanged.
+  - `scripts/build_site.py`: removed the `ADDITIONAL_GRAPHICS`
+    ("All Climate Engine graphics") section and its render call entirely,
+    per explicit instruction ("delete 'All Climate Engine graphics'
+    section"). Added a shared `_render_header()` partial and rewrote all
+    three page templates (`PAGE_TEMPLATE`, `INDEX_TEMPLATE`,
+    `HOME_TEMPLATE`) around the new `.wide`/card layout, plus a new
+    homepage hero + selector (search box, Map/List tabs).
+  - `scripts/report_content.py`'s `EXPLAINER_HTML` substantially expanded
+    from a short glossary into a full lay-person walkthrough: why
+    short-term/long-term are shown separately, what PDSI/Z-Index/SPI
+    actually measure, what a percentile means, the water-year convention,
+    how to read the normal-range climate charts, ETo/evaporative demand,
+    water balance, and what trend significance (p-value) means --
+    "add as much detail as possible for people (lay) to understand."
+  - `scripts/prep_boundaries.py`: added `write_map_geojson()`, producing a
+    single simplified (`MAP_SIMPLIFY_TOLERANCE = 0.002`deg,
+    ~150-200m at Idaho's latitude) `data/processed/map_boundaries.json`
+    combining both layers (759KB vs. 4.8MB unsimplified) with a `layer`
+    and `slug` property per feature, purpose-built for a lightweight
+    homepage Leaflet map.
+  - `site/assets/home.js` (new): loads `map_boundaries.json` once and
+    drives all three selector modes from the same data -- a live-filter
+    search box (name substring match, up to 25 results with a
+    groundwater/irrigation type badge), a Leaflet map (both layers
+    colored distinctly, hover tooltip, click-to-open-report), and a
+    grouped/sorted list view -- switchable via tabs, satisfying "search
+    bar, map itself, and a list" as three views over one dataset rather
+    than three separate implementations.
+**Why -- map data choice:** Reused the already-cut 65-polygon set (see
+"Irrigation organization scope cut" below) for the homepage map rather
+than the full 363-feature source shapefiles -- the map only needs to link
+to reports that actually exist.
+**Visual QA:** Full pass via the established headless-Chrome
+screenshot-then-Read loop (see "Visual QA" decision below): homepage
+(hero, search results, map with both layers clickable, list view grouped
+by type) and a report page (header through footer, all Bokeh charts,
+glossary) each checked in light mode, dark mode (CSS override injection),
+and at the confirmed ~500px mobile floor -- including a full-page 500x7000
+capture cropped into sections to check the Bokeh charts and stat tables
+specifically, since those are the most overflow-prone elements. No bugs
+found in this pass (contrast with the pre-redesign v1 QA pass, which did
+find and fix a real neutral-gray-invisibility bug -- this suggests the
+card/token system introduced here is more robust, not that QA was
+skipped).
+**How to apply:** The three homepage selector modes share one data file
+(`map_boundaries.json`) and one JS module (`home.js`) -- if the org/district
+list changes, only `prep_boundaries.py`'s `write_map_geojson()` output
+needs to regenerate; don't hand-maintain a separate list anywhere else.
 
 ### Irrigation organization scope cut: 363 -> 65 total polygons
 **Decision:** `scripts/prep_boundaries.py` now filters

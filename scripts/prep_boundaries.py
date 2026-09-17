@@ -145,8 +145,35 @@ def write_zipped_shapefile(gdf: gpd.GeoDataFrame, out_name: str) -> Path:
     return zip_path
 
 
+# Simplification tolerance (degrees) for the homepage selector map only --
+# the full-precision geometry above is what's sent to Climate Engine, this
+# is purely for a lightweight, fast-loading Leaflet map. ~0.002deg is
+# roughly 150-200m at Idaho's latitude, small relative to these polygons'
+# scale but cuts combined file size from ~4.8MB to ~675KB.
+MAP_SIMPLIFY_TOLERANCE = 0.002
+
+
+def write_map_geojson(layers: dict[str, gpd.GeoDataFrame]) -> Path:
+    import re as _re
+
+    frames = []
+    for layer_key, gdf in layers.items():
+        simplified = gdf.copy()
+        simplified["geometry"] = gdf.geometry.simplify(MAP_SIMPLIFY_TOLERANCE, preserve_topology=True)
+        simplified["layer"] = layer_key
+        simplified["slug"] = simplified["name"].map(lambda n: _re.sub(r"[^A-Za-z0-9]+", "_", n).strip("_")[:35])
+        frames.append(simplified)
+
+    import pandas as pd
+    combined = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs="EPSG:4326")
+    out_path = OUT_DIR / "map_boundaries.json"
+    combined.to_file(out_path, driver="GeoJSON")
+    return out_path
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    cleaned_layers = {}
     for out_name, (shp_path, name_col) in SOURCES.items():
         cleaned = clean_layer(shp_path, name_col)
 
@@ -160,8 +187,12 @@ def main() -> None:
         cleaned.to_file(json_path, driver="GeoJSON")
 
         zip_path = write_zipped_shapefile(cleaned, out_name)
+        cleaned_layers[out_name] = cleaned
 
         print(f"{shp_path.name}: {len(cleaned)} features -> {json_path}, {zip_path}")
+
+    map_path = write_map_geojson(cleaned_layers)
+    print(f"Homepage selector map: {map_path}")
 
 
 if __name__ == "__main__":
