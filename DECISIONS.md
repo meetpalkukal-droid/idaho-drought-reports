@@ -8,23 +8,14 @@ current setup/usage instructions.
 ## Open items
 
 - [x] Full batch run for both layers (363 polygons), 2026-09-16 cycle:
-      **333/363 (91.7%) succeeded** — 13/13 groundwater districts, 320/350
-      irrigation organizations. The remaining 30 irrigation organizations
-      failed identically across two `--retry-failed` passes (i.e. not
-      transient) — see the two decisions below for the breakdown and next
-      steps.
-- [ ] 22 irrigation organizations persistently fail with a server-side
-      `'coordinates'` error, unchanged across 2 retries (list in the
-      decision below). Next experiment if revisited: try `simplify_geometry`
-      on just these polygons, since several are large multi-part entities
-      (Twin Falls Canal Company, North Side Canal Company, Boise Project
-      Board of Control, Fremont-Madison Irrigation District, ...).
-- [ ] 8 irrigation organizations persistently get "No valid long-term
-      drought blend pixels" / "No valid USDM pixels" for their AOI —
-      polygons too small relative to gridMET's 4km grid. Not fixable by
-      retrying or by `simplify_geometry`; needs a content decision later
-      (exclude from the site with an explanatory note, or find a workaround
-      like a small buffer around the polygon).
+      **363/363 (100%) succeeded** after adding the geometry-fallback pass
+      — 13/13 groundwater districts, 350/350 irrigation organizations. The
+      30 irrigation organizations that failed via `feature_collection` (22
+      with a server-side `'coordinates'` bug, 8 with no valid gridMET
+      pixels for their AOI) all succeeded once resubmitted via
+      `/reports/drought/coordinates` — see the "Geometry fallback" decision
+      below for the full diagnosis and the confirmed fix, now automated in
+      `run_pipeline.py`.
 - [ ] Create the GitHub remote (personal account) and push.
 - [ ] Add repo secrets (`CE_API_KEY`, `GW_ASSET_ID`, `IRR_ASSET_ID`) and
       enable GitHub Pages (source = GitHub Actions) once pushed.
@@ -94,51 +85,50 @@ run with an unrelated server-side `'coordinates'` error, independent of
 concurrency (see next entry), and transient network errors are expected at
 some background rate regardless.
 
-### A server-side `'coordinates'` error persistently affects 22 geometrically complex entities
-**Decision:** No code fix attempted yet; tracked as an open item for a
-future session. These 350 - 30 = 320 successes are treated as the complete
-2026-09-16 irrigation-organizations cycle for now.
-**Why:** 22 of 350 irrigation organizations failed with a bare
-`Error: 'coordinates'` from Climate Engine's own report generator (fetched
-each failure's `error_link` for the full message — no stack trace beyond
-that), identically across two separate `--retry-failed` passes run minutes
-apart — i.e. confirmed persistent, not transient/concurrency-related (no
-"Too Many Requests" text). Affects some of Idaho's largest, most
-geometrically complex service areas: A & B Irrigation District, American
-Falls Reservoir Dist #2, Big Wood Canal Company, Boise Kuna Irrigation
-District, Boise Project Board of Control, Cambridge Ditch Co, Canyon Creek
-Canal Co Inc, Eastern Idaho Water Co, East Greenacres Irrigation District,
-Egin Bench Canals Inc, Farmers Cooperative Ditch Co, Fremont-Madison
-Irrigation District, Granite Twin Lakes Water Users, Lost Valley Reservoir
-Co, New York Irrigation District, North Side Canal Company Ltd, Salmon
-River Canal Co Ltd, Settlers Irrigation District, Thurman Mill Ditch Co
-Ltd, Twin Falls Canal Company, Upper Wood River Water Users Assn, Wilder
-Irrigation District, Wood River Valley Irrigation District — strongly
-suggests a bug in Climate Engine's handling of complex (likely
-multi-part/scattered-parcel) geometries rather than anything on our end.
-**How to apply:** Next experiment if revisited: try `simplify_geometry`
-(the API exposes a maxError-in-meters param we haven't used yet) on just
-these 22 polygons. If that doesn't help, it's worth an email to Climate
-Engine support with a specific site name + its `error_link` (each one's
-saved in `data/reports/raw/irrigation_organizations/2026-09-16/<slug>.json`).
-
-### 8 irrigation organizations have no valid drought-index pixels for their AOI
-**Decision:** No fix attempted; these are excluded from the 2026-09-16
-cycle's output. Needs a content/design decision later, not a pipeline fix.
-**Why:** Colson Creek Irrigation Co, Deer Park Water Assn Inc, Lindsey
-Creek Water Assn Inc, Reflection Ridge Estates Water Association, Secluded
-Acres Estates Water Assn, The Lone Spring Water Co Ltd, Williams Irrigation
-Co, and one more failed with "No valid long-term drought blend pixels were
-found" / "No valid USDM pixels were found for the submitted AOI and mask
-settings" — persistent across retries. gridMET Drought is a 4km-resolution
-grid; these are likely small polygons that don't overlap a valid pixel
-center, not a bug.
-**How to apply:** When doing site design, decide how to handle these:
-options include a small buffer around the polygon before querying (changes
-what "the report" represents, so worth a deliberate choice, not a silent
-pipeline tweak), or simply noting on the site that a jurisdiction is too
-small for gridMET's resolution and pointing users to the nearest larger
-enclosing district's report instead.
+### Geometry fallback: resubmit known-fixable failures via the coordinates endpoint
+**Decision:** Added `run_geometry_fallback()` / `--geometry-fallback` to
+`fetch_reports.py`, run automatically as a third pass in `run_pipeline.py`
+after the normal + retry passes. For any polygon still failing with one of
+two specific messages, it resubmits via `/reports/drought/coordinates`
+using geometry read directly from our own `data/processed/<layer>.json`
+(bypassing the EE FeatureCollection asset entirely for that one polygon):
+unbuffered for the `'coordinates'`-bug category, buffered by
+`GEOMETRY_FALLBACK_BUFFER_M` (3000m, in EPSG:5070) for the no-valid-pixels
+category. Result: **363/363 (100%)** succeeded on the 2026-09-16 cycle.
+**Why -- diagnosis:** The user pushed back on leaving 30 organizations
+(23 of them large, "critical" entities like Twin Falls Canal Company,
+Boise Project Board of Control, Fremont-Madison Irrigation District) as a
+permanent gap, and on accepting the 7 tiny orgs as unfixable rather than
+picking a nearby pixel. Investigated both properly instead of accepting
+the first plausible theory:
+  - Checked vertex counts, not just polygon-part counts, for the
+    `'coordinates'`-bug failures: no clean threshold on either (successful
+    polygons went up to 10,844 vertices; the smallest failure had only 329).
+    So "too complex" alone doesn't explain it.
+  - Tested submitting the exact same geometry via `/reports/drought/coordinates`
+    instead of `feature_collection` for 3 of the 23 (smallest by vertex
+    count, the one single-part outlier, and the largest/most complex) --
+    **all 3 succeeded**, including Twin Falls Canal Company (93,200-character
+    coordinate payload, 3 disjoint parts). This isolates the bug to
+    `feature_collection`'s internal step of pulling a filtered EE Feature's
+    geometry and re-serializing it -- not a limit on geometry complexity
+    itself, and not anything wrong with our source data.
+  - Tested the user's buffer idea directly: buffered the smallest (0.03 km²)
+    and largest (1.36 km²) of the 7 no-valid-pixel polygons by 3km (in
+    EPSG:5070) and resubmitted via coordinates -- **both succeeded**,
+    confirming the fix without guessing at a value.
+  - Ran the fallback against the real remaining 30 (not just the 5 test
+    cases): **30/30 succeeded.**
+**How to apply:** This fallback is now a permanent, automatic part of every
+cycle, not a one-time manual fix -- new polygons hitting either failure
+mode in future cycles will self-heal the same way. If a future polygon
+fails with a *different* message than the two handled here, it will NOT be
+caught by this fallback and needs the same kind of live diagnosis, not an
+assumption that it's the same root cause. The 3km buffer is a deliberate
+choice about what the report represents for those 7 tiny AOIs (their
+gridMET-derived indices reflect a 3km-radius neighborhood, not the parcel
+itself) -- worth a one-line disclosure on those specific report pages
+during site design, not a detail to bury.
 
 ### Site content will exclude Climate Engine's bundled PDF/report.png
 **Decision:** `build_site.py` skips `reports/report.pdf` and
