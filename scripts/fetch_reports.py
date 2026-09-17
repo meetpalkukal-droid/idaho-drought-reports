@@ -59,6 +59,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import zipfile
@@ -202,6 +203,12 @@ def submit_report_coordinates(
 
 
 def download_and_extract(zip_url: str, dest_dir: Path) -> Path:
+    # Climate Engine's images/ filenames embed a per-request UUID, so a
+    # re-fetch for the same org (a retry, or re-running a smoke test) would
+    # otherwise leave the old UUID's files sitting alongside the new ones
+    # rather than being replaced by them.
+    if dest_dir.exists():
+        shutil.rmtree(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     zip_path = dest_dir / "report.zip"
     with requests.get(zip_url, stream=True, timeout=300) as r:
