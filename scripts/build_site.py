@@ -3,11 +3,13 @@ Build the static site from the most recently fetched Climate Engine drought
 report outputs.
 
 Per the project narrative, this does NOT reuse Climate Engine's bundled PDF
-report -- it curates specific graphics (the current-conditions maps) and
-builds its own content from the CSVs: plain-language drought-class
-summaries (now / 3 months ago / 1 year ago) and a hand-drawn long-term
-(1986-present) trend chart. See report_content.py for the data work and
-DECISIONS.md for the design rationale.
+report -- it curates every other graphic and builds its own content from
+the CSVs: plain-language drought-class summaries (now / 3 months ago / 1
+year ago) and interactive Bokeh charts/tables rebuilding Climate Engine's
+own gm_*/ltb_eoy graphics from the same underlying data (per user
+direction -- see DECISIONS.md "Interactive charts rebuilt in Bokeh" for
+the validation against Climate Engine's actual published numbers). See
+report_content.py and climate_charts.py for the data work.
 """
 
 from __future__ import annotations
@@ -26,8 +28,22 @@ from report_content import (
     EXPLAINER_HTML,
     dominant_class,
     read_eoy_series,
-    render_long_term_svg,
     summary_snapshots,
+)
+from climate_charts import (
+    add_tmean,
+    load_gm_daily,
+    mann_kendall_trend,
+    normal_band_data,
+    water_year_pivot,
+    year_to_date_summary,
+)
+from bokeh_charts import (
+    BOKEH_CDN_TAGS,
+    embed_figures,
+    long_term_index_figure,
+    normal_band_figure,
+    water_year_trend_figure,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -61,14 +77,14 @@ ADDITIONAL_GRAPHICS = [
     ("dm_table", "U.S. Drought Monitor -- Class Table", "Climate Engine's own table for the USDM snapshot shown above."),
     ("stb_table", "Short-Term Blend -- Class Table", "Climate Engine's own table for the short-term conditions shown above."),
     ("ltb_table", "Long-Term Blend -- Class Table", "Climate Engine's own table for the long-term conditions shown above."),
-    ("ltb_eoy_timeseries", "Long-Term Blend -- Historical Trend (Climate Engine version)", "Climate Engine's own rendering of the same 1986-present series charted interactively above."),
-    ("gm_eto_rate", "Reference Evapotranspiration (ETo) Rate", "This year's daily evaporative demand vs. the historical normal range."),
-    ("gm_precip_cum", "Cumulative Precipitation", "This water year's running precipitation total vs. the historical normal range."),
-    ("gm_temp_summary", "Temperature Summary", "This year's high/low/mean temperature vs. the long-term average."),
-    ("gm_tmean_rate", "Mean Temperature", "This year's daily mean temperature vs. the historical normal range."),
-    ("gm_wb_summary", "Water Balance Summary", "This year's precipitation and evaporative demand vs. average, with percentile rank."),
-    ("gm_wy_precip_eto_trends", "Water-Year Precipitation & ETo Trends", "Annual precipitation and evaporative demand totals since 1981, with trend lines."),
-    ("gm_long_term_trends", "Long-Term Climate Trends", "Statistical trend per decade and significance for temperature, precipitation, and ETo."),
+    ("ltb_eoy_timeseries", "Long-Term Blend -- Historical Trend (Climate Engine version)", "Climate Engine's own rendering of the same 1986-present series charted interactively in Climate Context below."),
+    ("gm_eto_rate", "Reference ETo Rate (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
+    ("gm_precip_cum", "Cumulative Precipitation (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
+    ("gm_temp_summary", "Temperature Summary (Climate Engine version)", "Climate Engine's own table for the same statistics shown interactively below."),
+    ("gm_tmean_rate", "Mean Temperature (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
+    ("gm_wb_summary", "Water Balance Summary (Climate Engine version)", "Climate Engine's own table for the same statistics shown interactively below."),
+    ("gm_wy_precip_eto_trends", "Water-Year Precipitation & ETo Trends (Climate Engine version)", "Climate Engine's own rendering of the same chart shown interactively below."),
+    ("gm_long_term_trends", "Long-Term Climate Trends (Climate Engine version)", "Climate Engine's own table for the same trend statistics shown interactively below."),
 ]
 
 PAGE_TEMPLATE = """<!doctype html>
@@ -78,6 +94,7 @@ PAGE_TEMPLATE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{name} — Idaho Drought Report</title>
 <link rel="stylesheet" href="../assets/style.css">
+{bokeh_cdn}
 </head>
 <body>
 <nav><a href="../index.html">&larr; All {layer_title}</a></nav>
@@ -92,13 +109,22 @@ PAGE_TEMPLATE = """<!doctype html>
 {blend_sections}
 
 <h2>Long-term trend (1986&ndash;present)</h2>
-<p class="meta">Long-term drought blend index, one value per water year. Hover or tab through a point for its exact value.</p>
-<div class="chart-wrap">
-{chart_svg}
+<p class="meta">Long-term drought blend index, one value per water year. Interactive -- hover a point for its exact value, scroll to zoom.</p>
+<div class="bokeh-chart">{ltb_chart_div}</div>
+
+<h2>Climate context</h2>
+<p class="meta">Rebuilt from the same climate data Climate Engine's own report graphics use (see "All Climate Engine graphics" below for their versions) -- interactive, hover for exact values.</p>
+<div class="bokeh-grid">
+<div class="bokeh-chart">{eto_chart_div}</div>
+<div class="bokeh-chart">{precip_chart_div}</div>
+<div class="bokeh-chart">{tmean_chart_div}</div>
+<div class="bokeh-chart">{wy_trend_chart_div}</div>
 </div>
+{summary_tables}
+{trend_table}
 
 <h2>All Climate Engine graphics</h2>
-<p class="meta">Every graphic from this report's underlying Climate Engine data, including the ones synthesized above.</p>
+<p class="meta">Every graphic from this report's underlying Climate Engine data, including the ones rebuilt as interactive charts above.</p>
 <div class="map-grid">
 {additional_graphics}
 </div>
@@ -110,7 +136,7 @@ PAGE_TEMPLATE = """<!doctype html>
 {csv_links}
 </ul>
 
-<script src="../assets/chart.js"></script>
+{bokeh_script}
 </body>
 </html>
 """
@@ -218,6 +244,94 @@ def _render_blend_section(title: str, description: str, csv_path: Path, classes)
 </div>""".strip()
 
 
+def _ordinal(n: float) -> str:
+    n = int(round(n))
+    if 11 <= (n % 100) <= 13:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
+
+
+def _render_summary_tables(gm_df, wy_df, current_water_year: int) -> str:
+    """Rebuild of Climate Engine's gm_temp_summary + gm_wb_summary tables:
+    current (year-to-date) value vs. the historical average through the
+    same point in the water year, diff, % of average, percentile rank.
+    See climate_charts.year_to_date_summary for the methodology, validated
+    against Climate Engine's own published numbers in DECISIONS.md."""
+    rows_temp = []
+    for label, var in [("High temp (°F)", "Tmax"), ("Low temp (°F)", "Tmin"), ("Mean temp (°F)", "Tmean")]:
+        r = year_to_date_summary(gm_df, var, current_water_year, cumulative=False)
+        if r:
+            rows_temp.append((label, r))
+
+    rows_wb = []
+    for label, var in [("Precipitation (in)", "Precip"), ("Evap demand (in)", "ETo")]:
+        r = year_to_date_summary(gm_df, var, current_water_year, cumulative=True)
+        if r:
+            rows_wb.append((label, r))
+
+    if not rows_temp and not rows_wb:
+        return ""
+
+    def _table(title: str, rows: list[tuple[str, dict]]) -> str:
+        body = "".join(
+            f"<tr><td>{label}</td><td>{r['current']:.1f}</td><td>{r['average']:.1f}</td>"
+            f"<td>{r['diff']:+.1f}</td><td>{r['pct_of_avg']:.0f}%</td><td>{_ordinal(r['percentile'])}</td></tr>"
+            for label, r in rows
+        )
+        return f"""
+<div class="stat-table">
+  <h3>{title}</h3>
+  <table>
+    <thead><tr><th></th><th>This year</th><th>Average</th><th>Diff</th><th>% of avg</th><th>Percentile</th></tr></thead>
+    <tbody>{body}</tbody>
+  </table>
+</div>""".strip()
+
+    parts = []
+    if rows_temp:
+        parts.append(_table("Temperature summary", rows_temp))
+    if rows_wb:
+        parts.append(_table("Water balance summary", rows_wb))
+    return "\n".join(parts)
+
+
+def _render_trend_table(wy_df) -> str:
+    """Rebuild of Climate Engine's gm_long_term_trends table: Mann-Kendall
+    trend + significance per decade for each water-year variable."""
+    if wy_df is None or wy_df.empty:
+        return ""
+    years = wy_df.index.to_numpy()
+    specs = [("High temp", "Tmax", "°F"), ("Low temp", "Tmin", "°F"),
+             ("Precipitation", "Precip", "in"), ("Evap demand", "ETo", "in")]
+    if "Precip" in wy_df.columns and "ETo" in wy_df.columns:
+        wy_df = wy_df.copy()
+        wy_df["Precip_minus_ETo"] = wy_df["Precip"] - wy_df["ETo"]
+        specs.append(("Precip − Evap demand", "Precip_minus_ETo", "in"))
+
+    rows = []
+    for label, col, unit in specs:
+        if col not in wy_df.columns:
+            continue
+        t = mann_kendall_trend(years, wy_df[col].to_numpy())
+        sig = t["pvalue"] < 0.05
+        rows.append(
+            f"<tr><td>{label}</td><td>{t['mean']:.1f} {unit}</td>"
+            f"<td>{t['slope_per_decade']:+.2f} {unit}/decade</td>"
+            f"<td class=\"{'sig' if sig else ''}\">{'* ' if sig else ''}p = {t['pvalue']:.3f}</td></tr>"
+        )
+    if not rows:
+        return ""
+    return f"""
+<div class="stat-table">
+  <h3>Long-term climate trends</h3>
+  <p class="meta">Mann-Kendall trend test; * marks a statistically significant trend (p &lt; 0.05).</p>
+  <table>
+    <thead><tr><th></th><th>Average</th><th>Trend</th><th>Significance</th></tr></thead>
+    <tbody>{''.join(rows)}</tbody>
+  </table>
+</div>""".strip()
+
+
 def _find_geometry_fallback_note(raw_dir: Path, slug: str) -> str:
     sidecar_path = raw_dir / "_geometry_fallback.json"
     if not sidecar_path.exists():
@@ -294,7 +408,36 @@ def build(run_date: str) -> None:
             ]))
 
             eoy_csv = dest_dir / "data" / "ltb_eoy_timeseries.csv"
-            chart_svg = render_long_term_svg(read_eoy_series(eoy_csv), chart_id=f"ltc-{slug}") if eoy_csv.exists() else ""
+            gm_csv = dest_dir / "data" / "gm_timeseries.csv"
+            gm_wy_csv = dest_dir / "data" / "gm_wy_timeseries.csv"
+
+            figs = {}
+            figs["ltb"] = long_term_index_figure(read_eoy_series(eoy_csv)) if eoy_csv.exists() else None
+
+            summary_tables_html = ""
+            trend_table_html = ""
+            if gm_csv.exists():
+                gm_df = add_tmean(load_gm_daily(gm_csv))
+                current_wy = int(gm_df["water_year"].max())
+                figs["eto"] = normal_band_figure(
+                    normal_band_data(gm_df, "ETo", cumulative=False, current_water_year=current_wy),
+                    title="Reference ETo Rate", y_label="ETo (in/day)",
+                )
+                figs["precip"] = normal_band_figure(
+                    normal_band_data(gm_df, "Precip", cumulative=True, current_water_year=current_wy),
+                    title="Cumulative Precipitation", y_label="Precip (in)",
+                )
+                figs["tmean"] = normal_band_figure(
+                    normal_band_data(gm_df, "Tmean", cumulative=False, current_water_year=current_wy),
+                    title="Mean Temperature", y_label="Temp (°F)",
+                )
+                wy_df = water_year_pivot(gm_wy_csv) if gm_wy_csv.exists() else None
+                if wy_df is not None and not wy_df.empty:
+                    figs["wy_trend"] = water_year_trend_figure(wy_df)
+                    trend_table_html = _render_trend_table(wy_df)
+                summary_tables_html = _render_summary_tables(gm_df, wy_df, current_wy)
+
+            bokeh_script, divs = embed_figures(figs)
 
             page_html = PAGE_TEMPLATE.format(
                 name=html.escape(name),
@@ -304,10 +447,18 @@ def build(run_date: str) -> None:
                 disclosure=_find_geometry_fallback_note(raw_dir, slug),
                 map_cards=_render_image_cards(dest_dir, layer, slug, MAP_CARDS) or "<p>No current-conditions maps available for this report.</p>",
                 blend_sections=blend_sections,
-                chart_svg=chart_svg,
+                bokeh_cdn=BOKEH_CDN_TAGS,
+                ltb_chart_div=divs.get("ltb", "<p>No long-term trend data available.</p>"),
+                eto_chart_div=divs.get("eto", "<p>No ETo data available.</p>"),
+                precip_chart_div=divs.get("precip", "<p>No precipitation data available.</p>"),
+                tmean_chart_div=divs.get("tmean", "<p>No temperature data available.</p>"),
+                wy_trend_chart_div=divs.get("wy_trend", "<p>No water-year trend data available.</p>"),
+                summary_tables=summary_tables_html,
+                trend_table=trend_table_html,
                 additional_graphics=_render_image_cards(dest_dir, layer, slug, ADDITIONAL_GRAPHICS) or "<p>No additional graphics available for this report.</p>",
                 explainer=EXPLAINER_HTML,
                 csv_links=csv_links or "<li>No data files available.</li>",
+                bokeh_script=bokeh_script,
             )
             (layer_site_dir / f"{slug}.html").write_text(page_html, encoding="utf-8")
             index_items.append(f'<li><a href="{slug}.html">{html.escape(name)}</a></li>')

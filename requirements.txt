@@ -2,3 +2,7 @@ geopandas
 shapely
 pyproj
 requests
+pandas
+numpy
+scipy
+bokeh

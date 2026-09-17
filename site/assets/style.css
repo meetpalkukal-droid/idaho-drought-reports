@@ -176,37 +176,40 @@ ul { padding-left: 1.2em; }
   border: 1px solid var(--border);
 }
 
-/* Long-term trend chart */
-.long-term-chart { width: 100%; height: auto; display: block; }
-.ltc-line { stroke: var(--accent); stroke-width: 2; }
-.ltc-zeroline { stroke: var(--text-muted); stroke-width: 1; }
-.ltc-pt {
-  fill: var(--accent);
-  stroke: var(--surface-1);
-  stroke-width: 2;
-  cursor: pointer;
+/* Bokeh charts -- plain light cards regardless of page theme, matching how
+   the Climate Engine map PNGs already read against a dark page (see
+   DECISIONS.md "Interactive charts rebuilt in Bokeh"). */
+.bokeh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
 }
-.ltc-pt:hover, .ltc-pt:focus {
-  r: 6;
-  outline: none;
-}
-.ltc-end-dot { fill: var(--accent); stroke: var(--surface-1); stroke-width: 2; }
-.ltc-end-label { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
-.ltc-tick { fill: var(--text-muted); font-size: 11px; }
-.ltc-tooltip {
-  position: absolute;
-  pointer-events: none;
-  background: var(--surface-1);
+.bokeh-chart {
+  min-width: 0;
+  background: #fcfcfb;
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 0.82em;
-  color: var(--text-primary);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  transform: translate(-50%, -110%);
-  white-space: nowrap;
+  padding: 8px;
+  overflow-x: auto;
 }
-.chart-wrap { position: relative; margin: 12px 0; }
+
+/* Stat tables (temperature/water-balance summary, trend significance) */
+.stat-table { margin: 16px 0; }
+.stat-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+.stat-table th, .stat-table td {
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--gridline);
+  font-variant-numeric: tabular-nums;
+}
+.stat-table th:first-child, .stat-table td:first-child { text-align: left; }
+.stat-table th { color: var(--text-secondary); font-weight: 600; }
+.stat-table .sig { color: var(--accent); font-weight: 600; }
 
 /* Glossary */
 .glossary dt { font-weight: 600; margin-top: 12px; }

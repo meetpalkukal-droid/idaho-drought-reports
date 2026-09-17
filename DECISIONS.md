@@ -24,10 +24,15 @@ current setup/usage instructions.
       history before flipping visibility). Repo secrets (`CE_API_KEY`,
       `GW_ASSET_ID`, `IRR_ASSET_ID`) added, Pages source set to
       "GitHub Actions".
-- [ ] First Actions run: as of the visual-QA session, the workflow had
-      never executed (0 runs, Pages not yet built) -- user was about to
-      manually trigger it (`workflow_dispatch` with force=true). Confirm
-      it completes and actually deploys before trusting the cron.
+- [ ] First Actions run: pipeline itself ran successfully end-to-end in
+      Actions (confirmed via the public API), but the "Commit state.json"
+      step failed on `git push` -- almost certainly the repo's Settings ->
+      Actions -> General -> "Workflow permissions" defaulting to
+      read-only, which caps what a workflow can do regardless of the
+      `permissions: contents: write` already set in the workflow YAML.
+      User was pointed to switch it to "Read and write permissions" and
+      re-run. Confirm the next run completes AND actually deploys to
+      Pages before trusting the cron.
 - [x] Site design v1: per-org pages now show 3 curated current-conditions
       maps (USDM, short-term, long-term), plain-language drought-class
       summaries (now/3mo/1yr) for short-term, long-term, and USDM built
@@ -39,11 +44,20 @@ current setup/usage instructions.
       background, making a real "near normal" status look like missing
       data); ruled out an apparent mobile-overflow bug as a screenshot
       tooling artifact, not a real one.
+- [x] All 14 Climate Engine report graphics now shown per page (was 3
+      curated maps) -- user wants nothing skipped. New "All Climate Engine
+      graphics" section holds the other 11.
+- [x] Interactive Bokeh charts rebuilding 5 of Climate Engine's own gm_*/
+      ltb_eoy graphics from the underlying CSVs (per user direction: use
+      Bokeh for all charts) -- see "Interactive charts rebuilt in Bokeh"
+      decision below. Validated against Climate Engine's actual published
+      numbers, not just visually.
 - [ ] Site design open items: no live/interactive map (just Climate
-      Engine's static PNGs); short-term/long-term/USDM summaries render as
-      3 separate blocks rather than one integrated table; gm_* climate
-      graphics (precip, ETo, temperature) aren't surfaced anywhere yet;
-      no cross-report comparison view (e.g. map of all districts at once).
+      Engine's static PNGs); short-term/long-term/USDM class summaries
+      render as 3 separate blocks rather than one integrated table; no
+      cross-report comparison view (e.g. map of all districts at once);
+      the continuous (non-snapshot) drought-class-evolution chart idea
+      from the "what else can be a graphic" discussion is still unbuilt.
 - [ ] `DEFAULT_MAX_IN_FLIGHT = 15` in `fetch_reports.py` is a conservative
       starting guess, not a confirmed-safe ceiling — worth tuning upward
       once the pipeline is running unattended reliably, to cut wall-clock
@@ -52,6 +66,51 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Interactive charts rebuilt in Bokeh, validated against Climate Engine's real numbers, not just eyeballed
+**Decision:** Added `scripts/climate_charts.py` (data prep: water-year
+alignment, historical percentile bands by day-of-water-year, trend
+statistics) and `scripts/bokeh_charts.py` (figure builders), replacing the
+hand-drawn SVG long-term chart and adding 4 new interactive charts + 2
+summary tables + 1 trend-significance table, rebuilding 5 of Climate
+Engine's own `gm_*`/`ltb_eoy` graphics from the same underlying CSVs (user
+direction: "we will use bokeh library for all charts"). One shared
+BokehJS `<script>` (CDN) per page, one `components()` call per page
+covering all of that page's figures.
+**Why -- validated, not assumed:** Rather than trust the numbers looked
+plausible, every statistic was checked against Climate Engine's own
+published values from the same report (the `gm_wb_summary`/`gm_temp_summary`/
+`gm_long_term_trends` table images):
+  - Found and fixed a real off-by-one bug in water-year assignment (USGS
+    convention: an Oct-Dec date belongs to the *following* calendar year's
+    water year -- e.g. Oct 2025 is WY2026, not WY2025). Caught because the
+    "current water year" trace came back empty before the fix.
+  - Cumulative precipitation matched Climate Engine's number exactly
+    (11.18 in) once the water-year fix was in.
+  - The "current year vs. average" summary tables initially used a
+    full-water-year historical average, which didn't match Climate
+    Engine's numbers (13.90 vs. our 14.78 for precip) -- switched to
+    truncating the historical comparison to the same day-of-water-year the
+    current (partial) year has reached, which then matched near-exactly
+    (13.93 vs. 13.90) for precip/ETo/Tmax/Tmin/Tmean alike.
+  - The trend-significance table initially used OLS linear regression,
+    which matched Climate Engine's *averages* exactly but not its
+    trend/p-values -- switched to Mann-Kendall + Sen's slope (the standard
+    nonparametric trend test in hydrology), which then matched Climate
+    Engine's numbers **exactly** on all 5 variables (high/low temp,
+    precip, ETo, precip-ETo), confirming that's what Climate Engine
+    actually uses internally (undocumented, but now known empirically).
+**How to apply:** If a future chart's numbers look "close but off" to a
+Climate Engine reference graphic, don't assume it's unfixable
+approximation error -- as this session showed twice, it's more likely a
+methodology mismatch (wrong date convention, wrong comparison window,
+wrong statistical test) that can be found by testing alternate
+methodologies against the same known reference numbers. `year_to_date_summary`'s
+docstring still notes the remaining small discrepancies (e.g. ETo
+percentile 93rd vs. Climate Engine's 100th) that weren't fully resolved.
+**Also fixed during visual QA:** Bokeh figures defaulted to a fixed
+640px width, which overflowed their 2-column grid cells (~430px) instead
+of fitting -- switched to `sizing_mode="stretch_width"`.
 
 ### Visual QA: self-contained via local headless Chrome, not an MCP browser tool
 **Decision:** No MCP browser tool (built-in browser, Chrome extension) was
