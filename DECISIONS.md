@@ -24,16 +24,22 @@ current setup/usage instructions.
       history before flipping visibility). Repo secrets (`CE_API_KEY`,
       `GW_ASSET_ID`, `IRR_ASSET_ID`) added, Pages source set to
       "GitHub Actions".
-- [ ] First Actions run, take 2: after switching Settings -> Actions ->
-      "Workflow permissions" to read/write, re-ran -- pipeline itself
-      succeeded end-to-end in 49m30s (all 363 reports fetched, unattended,
-      in Actions), but "Commit state.json" still failed, this time in
-      <1s (rules out a timeout; it's an outright rejection). Since the
-      permissions fix didn't resolve it, likely a branch protection rule
-      on `main` blocking direct pushes rather than a token-scope issue.
-      Waiting on the actual step log text (API blocks log access without
-      admin auth, even for a public repo) to confirm before changing
-      anything else.
+- [x] First Actions run, root cause found: pipeline itself succeeded
+      end-to-end both times it ran manually (49m30s for all 363 reports,
+      fully unattended in Actions) -- the actual blocker was never
+      permissions or branch protection (both real fixes/checks, but not
+      the cause). The real error, from the step's own log text: `!
+      [rejected] main -> main (fetch first)` -- a plain git non-fast-
+      forward rejection. The job checks out `main` at the *start* of its
+      ~50-minute run; this session was actively pushing commits (the
+      Bokeh chart work) directly to `main` during that exact window both
+      times, so by the time the job tried to push its state.json commit,
+      the remote had moved on without it. Self-inflicted by concurrent
+      development, not a real production scenario -- but fixed the
+      workflow to `git fetch && git rebase origin/main` before pushing
+      regardless, so it's resilient to any future concurrent push (a
+      collaborator, a second triggered run) rather than assuming it'll
+      never happen again.
 - [x] Site design v1: per-org pages now show 3 curated current-conditions
       maps (USDM, short-term, long-term), plain-language drought-class
       summaries (now/3mo/1yr) for short-term, long-term, and USDM built

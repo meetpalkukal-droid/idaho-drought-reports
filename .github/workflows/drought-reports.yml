@@ -67,12 +67,24 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Rebase onto the current remote main before pushing: this job can run
+      # for ~50 minutes (the full 363-polygon fetch), and main may have moved
+      # in the meantime (a manual push, or a second triggered run) -- without
+      # this, git push fails outright with a non-fast-forward rejection, as
+      # it did the first two times this workflow ran manually while the repo
+      # was also being actively developed against. state.json is the only
+      # file this job ever touches, so a conflict here would mean two
+      # concurrent report-fetch runs landed at the same moment -- rare
+      # enough that failing loudly (rather than silently resolving it) is
+      # the right behavior if it ever happens.
       - name: Commit state.json
         if: steps.diff.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "Update drought reports $(date -u +%Y-%m-%d)"
+          git fetch origin main
+          git rebase origin/main
           git push
 
       - name: Upload site artifact
