@@ -419,6 +419,20 @@ def run_geometry_fallback(
     print(f"Geometry fallback: {len(targets)} name(s) eligible ({sum(1 for _,k in targets if k=='unbuffered')} unbuffered, "
           f"{sum(1 for _,k in targets if k=='buffered')} buffered)", file=sys.stderr)
 
+    # Record which slugs used a buffered AOI, so build_site.py can disclose
+    # it on those specific pages -- the buffer changes what the report
+    # represents (a 3km neighborhood, not the parcel itself), which is a
+    # deliberate, disclosed choice, not a detail to bury (see DECISIONS.md).
+    sidecar_path = raw_dir / "_geometry_fallback.json"
+    sidecar = json.loads(sidecar_path.read_text()) if sidecar_path.exists() else {}
+    for name, kind in targets:
+        if kind == "buffered":
+            sidecar[slugify(name)] = {
+                "name": name,
+                "buffer_m": GEOMETRY_FALLBACK_BUFFER_M,
+            }
+    sidecar_path.write_text(json.dumps(sidecar, indent=2))
+
     def _geometry_for(name: str, kind: str):
         geom = gdf.loc[name, "geometry"]
         if kind == "buffered":

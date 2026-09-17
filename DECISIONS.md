@@ -16,15 +16,23 @@ current setup/usage instructions.
       `/reports/drought/coordinates` — see the "Geometry fallback" decision
       below for the full diagnosis and the confirmed fix, now automated in
       `run_pipeline.py`.
-- [ ] Create the GitHub remote (personal account) and push.
+- [x] Create the GitHub remote (personal account) and push. Repo:
+      https://github.com/meetpalkukal-droid/idaho-drought-reports (private).
 - [ ] Add repo secrets (`CE_API_KEY`, `GW_ASSET_ID`, `IRR_ASSET_ID`) and
-      enable GitHub Pages (source = GitHub Actions) once pushed.
-- [ ] Site design: curate which Climate Engine graphics appear per page
-      (current-conditions map, summary table, long-term chart per the
-      narrative) instead of dumping all 14 images; add plain-language
-      explanations per drought index; decide whether to rebuild the
-      long-term time series chart ourselves from `ltb_eoy_timeseries.csv`
-      (1985(ish)-present) rather than using Climate Engine's own chart image.
+      enable GitHub Pages (source = GitHub Actions) — pushed, but these two
+      manual steps in the GitHub UI are still outstanding as of last check.
+- [x] Site design v1: per-org pages now show 3 curated current-conditions
+      maps (USDM, short-term, long-term), plain-language drought-class
+      summaries (now/3mo/1yr) for short-term, long-term, and USDM built
+      from the CSVs, a hand-drawn long-term (1986-present) trend chart with
+      hover tooltips, a glossary, and CSV downloads — see "Site design v1"
+      decision below. No visual QA yet (no browser tool available this
+      session) — worth a real look before calling it done.
+- [ ] Site design open items: no live/interactive map (just Climate
+      Engine's static PNGs); short-term/long-term/USDM summaries render as
+      3 separate blocks rather than one integrated table; gm_* climate
+      graphics (precip, ETo, temperature) aren't surfaced anywhere yet;
+      no cross-report comparison view (e.g. map of all districts at once).
 - [ ] `DEFAULT_MAX_IN_FLIGHT = 15` in `fetch_reports.py` is a conservative
       starting guess, not a confirmed-safe ceiling — worth tuning upward
       once the pipeline is running unattended reliably, to cut wall-clock
@@ -33,6 +41,55 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Site design v1: curated maps + our own class summaries + a hand-drawn long-term chart
+**Decision:** Added `scripts/report_content.py` and rewrote `build_site.py`'s
+page template around it. Each org/district page now has: 3 curated Climate
+Engine map images (USDM, short-term blend, long-term blend -- out of the 14
+images in each report zip, not all of them); three plain-language
+drought-class summary blocks (short-term, long-term, USDM), each showing
+now/~3-months-ago/~1-year-ago as a colored horizontal bar plus a one-line
+"mostly X (Y% of area)" headline, computed from the `stb_/ltb_/dm_timeseries.csv`
+class-histogram columns (which are fractional pixel counts, not
+percentages -- normalized by row sum); a hand-built inline-SVG long-term
+trend chart (1986-present, one point per water year) with diverging
+reference bands and a hover tooltip (`site/assets/chart.js`); a shared
+glossary explaining short-term/long-term blend, USDM, and the D0-D4 scale;
+and CSV download links. Index pages got a client-side search box
+(`site/assets/search.js`, no backend). Buffered-AOI orgs (see the geometry
+fallback decision) get a disclosure block explaining the 3km buffer.
+**Why -- color design:** Followed the dataviz skill's procedure. Drought
+severity is a *polarity* (dry <-> wet around a neutral midpoint), which the
+skill's color-formula.md names as the **diverging** job, not categorical --
+so it does NOT go through the 8-hue categorical CVD validator (running that
+validator on a sequential/diverging ramp fails by design per the skill's
+own scope note). Instead each arm is a standard 5-step monotonic-lightness
+ramp: the wet arm reuses the skill's documented sequential blue ramp
+(`palette.md` steps 200/300/400/500/650), the dry arm is a matching 5-step
+Reds progression (ColorBrewer-style, not in the skill's file since it only
+documents blue as the default sequential hue -- picked to mirror the blue
+arm's lightness steps), and the neutral midpoint is the skill's documented
+diverging gray (`#f0efec` light / `#383835` dark). The same 11-class ramp
+is reused for the USDM's 6 classes (folding its "no drought" into the
+neutral gray and D0-D4 into the same 4 dry steps) so the whole site reads
+as one consistent color language rather than 3 different schemes.
+**Why -- what's hand-built vs. reused:** The maps stay as Climate Engine's
+own PNGs (redoing geospatial rendering ourselves isn't worth it and isn't
+what "explain things more" in the narrative was asking for). The
+class-summary tables and the long-term chart are ours, computed from the
+CSVs -- this is the concrete form of the narrative's "we will use the
+graphics and data to do our own reports where we explain things a bit more
+and expand on things," and it's also what let the earlier bug diagnosis
+happen at all (parsing these same CSVs directly, rather than treating them
+as opaque downloads, is what surfaced the vertex-count and area patterns).
+**How to apply:** Any new report-page content should extend
+`report_content.py` (data/logic) and the template in `build_site.py`
+(markup), not hand-edit generated HTML. The color ramps are defined once in
+`site/assets/style.css` as `--dc-c0`..`--dc-c10` custom properties -- change
+them there, not per-usage. This is a v1 pass, not a final design -- no
+visual QA has happened yet (this session had no browser/screenshot tool
+available), so treat it as "structurally correct, unverified visually"
+until someone actually looks at a rendered page.
 
 ### The built site is never committed to git; only `state.json` is
 **Decision:** `.gitignore` now excludes all of `site/` except
