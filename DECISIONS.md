@@ -7,6 +7,9 @@ current setup/usage instructions.
 
 ## Open items
 
+- [x] Irrigation organization scope cut to 65 total polygons (13
+      groundwater + 52 irrigation), from 363 -- see "Irrigation
+      organization scope cut" decision below for the full rationale.
 - [x] Full batch run for both layers (363 polygons), 2026-09-16 cycle:
       **363/363 (100%) succeeded** after adding the geometry-fallback pass
       — 13/13 groundwater districts, 350/350 irrigation organizations. The
@@ -59,8 +62,13 @@ current setup/usage instructions.
       was no way to diagnose after the fact. Added an
       `actions/upload-artifact` step (`if: always()`, 5-day retention) to
       capture `data/reports/raw/` on every future run specifically so
-      this is diagnosable next time. Needs a re-run to actually
-      investigate. per-org pages now show 3 curated current-conditions
+      this is diagnosable next time. Root cause since confirmed (see
+      "Irrigation organization scope cut" decision below): Climate
+      Engine's 200/hr and 500/day rate limit applies unconditionally to
+      all accounts, including ones with a linked Earth Engine project --
+      363 polygons cannot fit in that budget even with zero polling
+      overhead (363 x (1 submit + 1 download) = 726 requests alone).
+- [x] Site design v1: per-org pages now show 3 curated current-conditions
       maps (USDM, short-term, long-term), plain-language drought-class
       summaries (now/3mo/1yr) for short-term, long-term, and USDM built
       from the CSVs, a hand-drawn long-term (1986-present) trend chart with
@@ -71,20 +79,24 @@ current setup/usage instructions.
       background, making a real "near normal" status look like missing
       data); ruled out an apparent mobile-overflow bug as a screenshot
       tooling artifact, not a real one.
-- [x] All 14 Climate Engine report graphics now shown per page (was 3
-      curated maps) -- user wants nothing skipped. New "All Climate Engine
-      graphics" section holds the other 11.
+- [x] All 14 Climate Engine report graphics were shown per page for a
+      time (was 3 curated maps) -- since superseded, see below: the "All
+      Climate Engine graphics" section holding the other 11 was removed
+      again per user direction once the Bokeh rebuilds + class-evolution
+      charts made it redundant clutter rather than useful reference.
 - [x] Interactive Bokeh charts rebuilding 5 of Climate Engine's own gm_*/
       ltb_eoy graphics from the underlying CSVs (per user direction: use
       Bokeh for all charts) -- see "Interactive charts rebuilt in Bokeh"
       decision below. Validated against Climate Engine's actual published
       numbers, not just visually.
-- [ ] Site design open items: no live/interactive map (just Climate
-      Engine's static PNGs); short-term/long-term/USDM class summaries
-      render as 3 separate blocks rather than one integrated table; no
-      cross-report comparison view (e.g. map of all districts at once);
-      the continuous (non-snapshot) drought-class-evolution chart idea
-      from the "what else can be a graphic" discussion is still unbuilt.
+- [x] Continuous drought-class-evolution charts (stacked area, full
+      ~390-day window) added -- the one thing Climate Engine's own report
+      never shows at all, see "Add drought-class-evolution charts" commit.
+- [ ] Site design open items remaining: no live/interactive current-
+      conditions map (the 3 hero maps are still Climate Engine's static
+      PNGs -- rebuilding those would mean redoing raster/geospatial
+      rendering ourselves, out of scope so far); no cross-report
+      comparison view beyond the new homepage selector map (see below).
 - [ ] `DEFAULT_MAX_IN_FLIGHT = 15` in `fetch_reports.py` is a conservative
       starting guess, not a confirmed-safe ceiling — worth tuning upward
       once the pipeline is running unattended reliably, to cut wall-clock
@@ -93,6 +105,66 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Irrigation organization scope cut: 363 -> 65 total polygons
+**Decision:** `scripts/prep_boundaries.py` now filters
+`irrigation_organizations` down to a hardcoded 52-name
+`IRRIGATION_ORG_PRIORITY_LIST`: the 7 Surface Water Coalition members
+(A&B, American Falls Reservoir Dist #2, Burley, Milner, Minidoka, North
+Side Canal Co, Twin Falls Canal Co -- the senior surface-water right
+holders on the Snake River central to the groundwater-surface water
+conflict this whole project is about) plus the next 45 largest
+non-SWC/non-NPS organizations by acreage. Combined with all 13 groundwater
+districts (unchanged), that's **65 total polygons**, down from 363.
+`NATIONAL PARK SERVICE` was explicitly excluded from the acreage ranking
+even though it would have placed #16 -- it's a place-of-use entry, not an
+operational irrigation organization.
+**Why:** Confirmed via Climate Engine's own quota policy page (quoted
+verbatim): *"The API imposes rate limits of 200 requests/hour and 500
+requests/day for all users (both quota limited and non-quota accounts)."*
+This is a separate, unconditional limit from the EE *compute* quota that
+linking our own Earth Engine project removes -- initially conflated the
+two into one thing, which was the wrong read. The math makes 363 polygons
+architecturally impossible regardless of code changes: 363 x (1 submit +
+1 download) = 726 requests, already 45% over the daily budget with *zero*
+polling overhead. This was confirmed empirically, not just from the docs:
+a live run cut off cleanly at ~78/350 (not the scattered pattern of the
+earlier concurrency-limit errors), and a follow-up single-polygon test
+*with zero concurrent load* still got rate-limited account-wide on both
+`/reports/drought/feature_collection` and `/reports/drought/coordinates`,
+while a lightweight endpoint (`/home/user/quotas`) worked fine --
+confirming it's specifically the reports endpoints being throttled, not a
+general outage.
+**Rejected alternatives:**
+  - *Spread 363 across the 5-day window (~73/day)* -- would have kept
+    full coverage, since 5 days x 500/day = 2500 total budget over a
+    cycle vs. 500 for a single active day. User explicitly rejected this
+    in favor of cutting scope to fit one active day, given the pipeline
+    only runs once per cycle (the cadence gate) and the user wanted the
+    full set available together rather than trickling in.
+  - *Email Climate Engine for a rate-limit increase* -- user declined for
+    now (skip, not permanently ruled out).
+  - *Google Earth Engine paid/commercial tier* -- doesn't apply; the
+    200/hr-500/day limit is Climate Engine's own API gateway, unrelated
+    to what's paid to Google. There's a separate commercial "Climate
+    Engine" entity (climateengine.com, distinct from the free academic
+    climateengine.org) offering enterprise-tier APIs with unpublished
+    pricing (contact-sales only) -- plausible but unverified as a real
+    fix, and a real-money commercial decision the user chose not to
+    pursue for this project.
+  - *Include all 52 "Irrigation District"-named entities regardless of
+    acreage* -- rejected once the actual size distribution was checked:
+    they range from 466 to 280,410 acres, so "District" alone isn't a
+    reliable significance signal (would add 48 more, mostly tiny, at
+    the cost of pushing out larger non-district companies).
+**How to apply:** If the org list is ever revisited, regenerate from
+`IRRIGATION_ORG_PRIORITY_LIST` in `prep_boundaries.py` -- don't hand-edit
+`data/processed/irrigation_organizations.json` directly, it's a build
+output. The existing Earth Engine asset (`IRR_ASSET_ID`) still contains
+all 350 features; it was never re-uploaded, since `feature_collection`
+filtering by name only needs the asset to *contain* the target features,
+not be limited to them -- only the local name list drives which ones get
+requested.
 
 ### Interactive charts rebuilt in Bokeh, validated against Climate Engine's real numbers, not just eyeballed
 **Decision:** Added `scripts/climate_charts.py` (data prep: water-year

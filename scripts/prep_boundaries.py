@@ -28,6 +28,76 @@ SOURCES = {
 }
 OUT_DIR = ROOT / "data" / "processed"
 
+# Climate Engine's own reports API rate-limits at 200 req/hour and 500
+# req/day, UNCONDITIONALLY -- linking our own Earth Engine project removes
+# the separate EE *compute* quota, but not this one (confirmed via their
+# published quota policy page, see DECISIONS.md). At ~1 submit + ~2-3
+# status polls + 1 download per polygon, all 350 irrigation organizations
+# cannot fit in a single day's budget alongside the 13 groundwater
+# districts -- a live run confirmed this empirically (a clean cutoff
+# partway through, then the account got rate-limited account-wide for
+# hours). Restricted to a curated 52: the 7 Surface Water Coalition
+# members (the senior surface-water right holders on the Snake River,
+# central to Idaho's groundwater-surface water conflict this project is
+# about) plus the next 45 largest by acreage -- user-directed selection,
+# see DECISIONS.md "Irrigation organization scope cut" for the full
+# rationale and the rejected alternatives (spreading across the 5-day
+# window, paying for a higher limit).
+IRRIGATION_ORG_PRIORITY_LIST = [
+    "A & B IRRIGATION DISTRICT",
+    "AMERICAN FALLS RESERVOIR DIST #2",
+    "BURLEY IRRIGATION DISTRICT",
+    "MILNER IRRIGATION DISTRICT",
+    "MINIDOKA IRRIGATION DISTRICT",
+    "NORTH SIDE CANAL COMPANY LTD",
+    "TWIN FALLS CANAL COMPANY",
+    "PAHSIMEROI IRRIGATION DIST",
+    "FREMONT MADISON IRRIGATION DISTRICT",
+    "BOISE PROJECT BOARD OF CONTROL",
+    "BIG WOOD CANAL COMPANY",
+    "OAKLEY CANAL CO",
+    "SOUTHWEST IRRIGATION DISTRICT",
+    "BLACK CANYON IRRIGATION DISTRICT",
+    "LAKE RESERVOIR CO",
+    "ABERDEEN SPRINGFIELD CANAL CO",
+    "NAMPA & MERIDIAN IRRIGATION DISTRICT",
+    "WILDER IRRIGATION DISTRICT",
+    "BOISE KUNA IRRIGATION DISTRICT",
+    "LAST CHANCE CANAL CO LTD",
+    "SALMON RIVER CANAL CO LTD",
+    "BIG LOST RIVER IRRIGATION DISTRICT",
+    "GEM IRRIGATION DISTRICT",
+    "NORTH FORK RESERVOIR CO",
+    "PROGRESSIVE IRRIGATION DISTRICT",
+    "IDAHO IRRIGATION DISTRICT",
+    "CONSOLIDATED IRRIGATION CO",
+    "NORTH FREMONT CANAL SYSTEMS INC",
+    "EGIN BENCH CANALS INC",
+    "PIONEER IRRIGATION DISTRICT",
+    "TWIN LAKES CANAL CO",
+    "MUD LAKE WATER USERS INC",
+    "NEW SWEDEN IRRIGATION DISTRICT",
+    "FALLS IRRIGATION DISTRICT",
+    "GOOSE CREEK IRRIGATION DISTRICT",
+    "BURGESS CANAL & IRRIGATING CO",
+    "CRANE CREEK RESERVOIR ADMINISTRATION BOARD",
+    "BUTTE & MARKET LAKE CANAL CO",
+    "EMMETT IRRIGATION DISTRICT",
+    "BELL RAPIDS MUTUAL IRRIGATION CO/STATE OF IDAHO",
+    "SNAKE RIVER VALLEY IRRIGATION DISTRICT",
+    "KING HILL IRRIGATION DISTRICT",
+    "SOUTHEAST IDAHO CANAL CO",
+    "FARMERS COOPERATIVE DITCH CO",
+    "PEOPLES CANAL & IRRIGATION CO",
+    "LOWER PAYETTE DITCH CO",
+    "CANYON CREEK CANAL CO INC",
+    "BLACKFOOT IRRIGATION CO",
+    "FARMERS COOPERATIVE IRRIGATION CO LTD",
+    "NEW YORK IRRIGATION DISTRICT",
+    "TETON PIPELINE ASSN INC",
+    "LOST VALLEY RESERVOIR CO",
+]
+
 
 def clean_layer(shp_path: Path, name_col: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(shp_path)
@@ -79,6 +149,12 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for out_name, (shp_path, name_col) in SOURCES.items():
         cleaned = clean_layer(shp_path, name_col)
+
+        if out_name == "irrigation_organizations":
+            missing = set(IRRIGATION_ORG_PRIORITY_LIST) - set(cleaned["name"])
+            if missing:
+                raise ValueError(f"priority list names not found in source data: {sorted(missing)}")
+            cleaned = cleaned[cleaned["name"].isin(IRRIGATION_ORG_PRIORITY_LIST)].reset_index(drop=True)
 
         json_path = OUT_DIR / f"{out_name}.json"
         cleaned.to_file(json_path, driver="GeoJSON")
