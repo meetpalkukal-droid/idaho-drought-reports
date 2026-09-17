@@ -32,6 +32,7 @@ from report_content import (
 )
 from climate_charts import (
     add_tmean,
+    class_evolution_df,
     load_gm_daily,
     mann_kendall_trend,
     normal_band_data,
@@ -40,6 +41,7 @@ from climate_charts import (
 )
 from bokeh_charts import (
     BOKEH_CDN_TAGS,
+    class_evolution_figure,
     embed_figures,
     long_term_index_figure,
     normal_band_figure,
@@ -107,6 +109,14 @@ PAGE_TEMPLATE = """<!doctype html>
 </div>
 
 {blend_sections}
+
+<h2>Drought class evolution</h2>
+<p class="meta">The full picture behind the 3 snapshots above -- not something Climate Engine's own report shows at all. Interactive -- hover for the exact class breakdown on any date.</p>
+<div class="bokeh-grid">
+<div class="bokeh-chart">{stb_evolution_div}</div>
+<div class="bokeh-chart">{ltb_evolution_div}</div>
+<div class="bokeh-chart">{dm_evolution_div}</div>
+</div>
 
 <h2>Long-term trend (1986&ndash;present)</h2>
 <p class="meta">Long-term drought blend index, one value per water year. Interactive -- hover a point for its exact value, scroll to zoom.</p>
@@ -414,6 +424,17 @@ def build(run_date: str) -> None:
             figs = {}
             figs["ltb"] = long_term_index_figure(read_eoy_series(eoy_csv)) if eoy_csv.exists() else None
 
+            for fig_key, csv_name, classes, title in [
+                ("stb_evo", "stb_timeseries.csv", BLEND_CLASSES, "Short-Term Blend Evolution"),
+                ("ltb_evo", "ltb_timeseries.csv", BLEND_CLASSES, "Long-Term Blend Evolution"),
+                ("dm_evo", "dm_timeseries.csv", USDM_CLASSES, "U.S. Drought Monitor Evolution"),
+            ]:
+                csv_path = dest_dir / "data" / csv_name
+                figs[fig_key] = (
+                    class_evolution_figure(class_evolution_df(csv_path, [c.key for c in classes]), classes, title)
+                    if csv_path.exists() else None
+                )
+
             summary_tables_html = ""
             trend_table_html = ""
             if gm_csv.exists():
@@ -448,6 +469,9 @@ def build(run_date: str) -> None:
                 map_cards=_render_image_cards(dest_dir, layer, slug, MAP_CARDS) or "<p>No current-conditions maps available for this report.</p>",
                 blend_sections=blend_sections,
                 bokeh_cdn=BOKEH_CDN_TAGS,
+                stb_evolution_div=divs.get("stb_evo", "<p>No short-term data available.</p>"),
+                ltb_evolution_div=divs.get("ltb_evo", "<p>No long-term data available.</p>"),
+                dm_evolution_div=divs.get("dm_evo", "<p>No USDM data available.</p>"),
                 ltb_chart_div=divs.get("ltb", "<p>No long-term trend data available.</p>"),
                 eto_chart_div=divs.get("eto", "<p>No ETo data available.</p>"),
                 precip_chart_div=divs.get("precip", "<p>No precipitation data available.</p>"),

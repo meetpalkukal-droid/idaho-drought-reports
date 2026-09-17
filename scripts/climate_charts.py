@@ -15,6 +15,19 @@ import pandas as pd
 from scipy import stats
 
 
+def class_evolution_df(csv_path: Path, class_keys: list[str]) -> pd.DataFrame:
+    """Wide DataFrame (index=date, one column per class key, values =
+    percent of that row's area) from a stb_/ltb_/dm_timeseries.csv --
+    the full time-evolving series those CSVs contain, which Climate
+    Engine's own report only ever shows 3 snapshots of (now/3mo/1yr)."""
+    df = pd.read_csv(csv_path)
+    df["date"] = pd.to_datetime(df["Date"])
+    totals = df[class_keys].sum(axis=1)
+    for k in class_keys:
+        df[k] = np.where(totals > 0, df[k] / totals * 100, 0.0)
+    return df.set_index("date")[class_keys].sort_index()
+
+
 def _water_year(date: pd.Timestamp) -> int:
     # USGS convention: water year N runs Oct 1 (N-1) -> Sep 30 (N), so an
     # Oct-Dec date belongs to the FOLLOWING calendar year's water year, not

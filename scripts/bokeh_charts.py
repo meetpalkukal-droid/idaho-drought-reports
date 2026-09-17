@@ -28,6 +28,16 @@ BG = "#fcfcfb"
 GRID = "#e1e0d9"
 INK = "#0b0b0b"
 MUTED = "#898781"
+
+# Bokeh renders client-side from literal color values -- it can't read
+# CSS custom properties -- so the diverging drought-class ramp is
+# duplicated here from site/assets/style.css's light-mode --dc-c0..c10
+# values. Keep these in sync if that palette ever changes.
+DROUGHT_HEX = {
+    "c0": "#a50f15", "c1": "#de2d26", "c2": "#fb6a4a", "c3": "#fc9272", "c4": "#fcbba1",
+    "c5": "#cdccc4",
+    "c6": "#9ec5f4", "c7": "#6da7ec", "c8": "#3987e5", "c9": "#256abf", "c10": "#104281",
+}
 ACCENT = "#2a78d6"
 ACCENT_BAND = "#2a78d6"
 CURRENT_COLOR = "#e34948"
@@ -157,6 +167,48 @@ def long_term_index_figure(series: list[tuple[int, float]]) -> figure:
     fig.scatter(x="year", y="value", source=src, size=6, color=ACCENT)
     fig.add_tools(HoverTool(renderers=[line], tooltips=[("Water year", "@year"), ("Index", "@value{+0.00}")]))
     fig.y_range.start, fig.y_range.end = -3, 3
+    return fig
+
+
+def class_evolution_figure(df, classes, title: str) -> figure:
+    """Continuous drought-class-% stacked area over the full ~390-day
+    window a stb_/ltb_/dm_timeseries.csv covers -- not a Climate Engine
+    graphic at all (their own report only ever shows 3 snapshots of this
+    same data, now/3mo/1yr, as a static table); this is the one thing
+    genuinely new that the underlying data supports and Climate Engine
+    doesn't show. Stack order runs driest (bottom) to wettest (top),
+    matching the classes list order."""
+    if df is None or df.empty:
+        return None
+
+    from bokeh.models import DatetimeTickFormatter
+
+    keys = [c.key for c in classes]
+    source = ColumnDataSource(df.reset_index())
+
+    fig = figure(
+        title=title, height=FIG_HEIGHT, width=FIG_WIDTH, sizing_mode="stretch_width",
+        x_axis_type="datetime", background_fill_color=BG, border_fill_color=BG,
+        tools="pan,box_zoom,wheel_zoom,reset,save", toolbar_location="above",
+        y_range=(0, 100),
+    )
+    fig.grid.grid_line_color = GRID
+    fig.outline_line_color = "#c3c2b7"
+    fig.yaxis.axis_label = "% of area"
+    fig.yaxis.axis_label_text_color = MUTED
+    fig.axis.major_label_text_color = MUTED
+    fig.axis.axis_line_color = "#c3c2b7"
+    fig.title.text_color = INK
+    fig.title.text_font_size = "13px"
+    fig.xaxis.formatter = DatetimeTickFormatter(days="%b %d", months="%b %Y")
+
+    colors = [DROUGHT_HEX[k] for k in keys]
+    renderers = fig.varea_stack(stackers=keys, x="date", color=colors, source=source, legend_label=[c.label for c in classes])
+
+    tooltips = [("Date", "@date{%F}")] + [(c.label, f"@{c.key}{{0.1f}}%") for c in classes]
+    fig.add_tools(HoverTool(renderers=renderers, tooltips=tooltips, formatters={"@date": "datetime"}, mode="vline"))
+
+    fig.legend.visible = False  # 11 classes as a legend box is noise here; the hover carries identity (see the shared legend under the summary bars above instead)
     return fig
 
 
