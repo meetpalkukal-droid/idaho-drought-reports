@@ -24,23 +24,43 @@ current setup/usage instructions.
       history before flipping visibility). Repo secrets (`CE_API_KEY`,
       `GW_ASSET_ID`, `IRR_ASSET_ID`) added, Pages source set to
       "GitHub Actions".
-- [x] First Actions run, root cause found: pipeline itself succeeded
-      end-to-end both times it ran manually (49m30s for all 363 reports,
-      fully unattended in Actions) -- the actual blocker was never
-      permissions or branch protection (both real fixes/checks, but not
-      the cause). The real error, from the step's own log text: `!
-      [rejected] main -> main (fetch first)` -- a plain git non-fast-
-      forward rejection. The job checks out `main` at the *start* of its
-      ~50-minute run; this session was actively pushing commits (the
-      Bokeh chart work) directly to `main` during that exact window both
-      times, so by the time the job tried to push its state.json commit,
-      the remote had moved on without it. Self-inflicted by concurrent
-      development, not a real production scenario -- but fixed the
-      workflow to `git fetch && git rebase origin/main` before pushing
-      regardless, so it's resilient to any future concurrent push (a
+- [x] First Actions run, push blocker found: the "Run pipeline" step
+      itself exited 0 (success) both times it ran manually, but that's
+      exit-code success, NOT "processed all 363 polygons" -- see the next
+      item, this was a red herring at the time since the push failure hid
+      the real state. The actual push blocker was never permissions or
+      branch protection (both real fixes/checks, but not the cause). The
+      real error, from the step's own log text: `! [rejected] main -> main
+      (fetch first)` -- a plain git non-fast-forward rejection. The job
+      checks out `main` at the *start* of its run; this session was
+      actively pushing commits (the Bokeh chart work) directly to `main`
+      during that exact window both times, so by the time the job tried
+      to push its state.json commit, the remote had moved on without it.
+      Self-inflicted by concurrent development, not a real production
+      scenario -- but fixed the workflow to `git fetch && git rebase
+      origin/main` before pushing regardless, so it's resilient to any
+      future concurrent push (a
       collaborator, a second triggered run) rather than assuming it'll
       never happen again.
-- [x] Site design v1: per-org pages now show 3 curated current-conditions
+- [ ] First Actions run that actually pushed+deployed (2026-09-17,
+      16:10-16:39): site went live at
+      https://meetpalkukal-droid.github.io/idaho-drought-reports/, but
+      only **13/13 groundwater districts and ~78/350 irrigation
+      organizations** made it -- and the 78 are a clean, gap-free
+      alphabetical run (Aberdeen through "Enterprise Irrigation
+      District"), not scattered failures like the concurrency-limit
+      errors from local testing. That signature means the *process*
+      stopped partway through an ordered loop -- a timeout, crash, or
+      resource limit -- not per-request failures (those are already
+      tolerated and would leave gaps, not a clean cutoff). Root cause not
+      yet confirmed: the job's own console log isn't readable without
+      repo admin auth, and `data/reports/raw/` (which would show the
+      real per-org error messages) is intentionally gitignored, so there
+      was no way to diagnose after the fact. Added an
+      `actions/upload-artifact` step (`if: always()`, 5-day retention) to
+      capture `data/reports/raw/` on every future run specifically so
+      this is diagnosable next time. Needs a re-run to actually
+      investigate. per-org pages now show 3 curated current-conditions
       maps (USDM, short-term, long-term), plain-language drought-class
       summaries (now/3mo/1yr) for short-term, long-term, and USDM built
       from the CSVs, a hand-drawn long-term (1986-present) trend chart with

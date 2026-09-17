@@ -51,6 +51,23 @@ jobs:
           if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
           python scripts/run_pipeline.py $ARGS
 
+      # Debugging safety net: data/reports/raw/ (per-polygon status JSON,
+      # including error messages) is never committed to git (see below),
+      # so without this there is no way to diagnose a run after the fact --
+      # e.g. a 2026-09-17 run that silently only completed ~78 of 350
+      # irrigation orgs (a clean alphabetical cutoff, not scattered
+      # failures) with no way to see why, since the job's own console log
+      # isn't readable without repo admin auth. Kept only 5 days (one
+      # cadence cycle) since it's for debugging, not an audit trail.
+      - name: Upload raw status (debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raw-status-${{ github.run_id }}
+          path: data/reports/raw/
+          retention-days: 5
+          if-no-files-found: ignore
+
       # site/ is a pure build artifact (regenerated fresh every run from
       # data/reports/extracted, itself regenerated fresh from the API) and
       # deployed straight to Pages below -- never committed to git (333
