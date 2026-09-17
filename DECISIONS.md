@@ -17,17 +17,28 @@ current setup/usage instructions.
       below for the full diagnosis and the confirmed fix, now automated in
       `run_pipeline.py`.
 - [x] Create the GitHub remote (personal account) and push. Repo:
-      https://github.com/meetpalkukal-droid/idaho-drought-reports (private).
-- [ ] Add repo secrets (`CE_API_KEY`, `GW_ASSET_ID`, `IRR_ASSET_ID`) and
-      enable GitHub Pages (source = GitHub Actions) — pushed, but these two
-      manual steps in the GitHub UI are still outstanding as of last check.
+      https://github.com/meetpalkukal-droid/idaho-drought-reports.
+      GitHub Pages requires either a paid plan or a public repo for a
+      private-repo account -- user chose public (the site itself is meant
+      to be public anyway; verified no secrets exist anywhere in git
+      history before flipping visibility). Repo secrets (`CE_API_KEY`,
+      `GW_ASSET_ID`, `IRR_ASSET_ID`) added, Pages source set to
+      "GitHub Actions".
+- [ ] First Actions run: as of the visual-QA session, the workflow had
+      never executed (0 runs, Pages not yet built) -- user was about to
+      manually trigger it (`workflow_dispatch` with force=true). Confirm
+      it completes and actually deploys before trusting the cron.
 - [x] Site design v1: per-org pages now show 3 curated current-conditions
       maps (USDM, short-term, long-term), plain-language drought-class
       summaries (now/3mo/1yr) for short-term, long-term, and USDM built
       from the CSVs, a hand-drawn long-term (1986-present) trend chart with
       hover tooltips, a glossary, and CSV downloads — see "Site design v1"
-      decision below. No visual QA yet (no browser tool available this
-      session) — worth a real look before calling it done.
+      decision below.
+- [x] Visual QA pass (see "Visual QA" decision below): found and fixed one
+      real bug (neutral-gray class color nearly invisible against the page
+      background, making a real "near normal" status look like missing
+      data); ruled out an apparent mobile-overflow bug as a screenshot
+      tooling artifact, not a real one.
 - [ ] Site design open items: no live/interactive map (just Climate
       Engine's static PNGs); short-term/long-term/USDM summaries render as
       3 separate blocks rather than one integrated table; gm_* climate
@@ -41,6 +52,60 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Visual QA: self-contained via local headless Chrome, not an MCP browser tool
+**Decision:** No MCP browser tool (built-in browser, Chrome extension) was
+actually connected in this session despite being listed as available skills
+-- both were checked and neither had working tools. Instead, used the
+Chrome and Edge binaries already installed on the machine (found at their
+standard Windows install paths, not on `PATH`) in headless screenshot mode
+directly: `chrome.exe --headless --disable-gpu --screenshot=out.png
+--window-size=W,H file:///<absolute path>`, then read the resulting PNG
+with the Read tool to actually see it. This is now a repeatable, self-
+contained way to check any local HTML file's rendering without depending
+on a browser tool being connected.
+**Why:** The user explicitly asked for a way to detect and fix visual
+issues without relying on them to look and report back. This works because
+headless Chrome can open `file://` paths directly (unlike an MCP browser
+pane running in a separate sandboxed environment), and screenshot-then-Read
+is a complete visual feedback loop.
+**Important caveat found the hard way:** `--window-size` has a floor around
+**500px** in this Chrome build (152.0.7977.84) on Windows -- requesting
+390x700 (a phone width) actually renders at `innerWidth=500` while the
+`--screenshot` PNG is still saved at the requested 390px canvas, so the
+screenshot silently *crops* a 500px-wide render down to 390px rather than
+actually laying out at 390px. This looks exactly like a horizontal-overflow
+bug (content cut off mid-card) but isn't one -- confirmed by requesting
+`--window-size=500,700` (matching the real floor) and seeing the same
+layout render with no cutoff at all. Diagnosed by injecting a small
+on-page script that prints `window.innerWidth` and computed grid styles
+directly into the screenshot (a `<pre>` block), rather than trusting the
+requested window-size.
+**How to apply:** For any future headless-Chrome visual check, treat
+`--window-size` values below ~500 as unreliable -- verify the true
+rendered width with an on-page diagnostic (or via CDP `Emulation.setDeviceMetricsOverride`,
+not attempted here) before concluding a narrow-viewport layout is actually
+broken. Don't re-litigate this every session -- this entry is the record.
+
+### Fixed: near-normal drought class was nearly invisible against the page background
+**Decision:** Changed `--dc-c5` (the diverging ramp's neutral midpoint) from
+the dataviz skill's literal documented value (`#f0efec` light / `#383835`
+dark) to `#cdccc4` light / `#4a4946` dark -- enough contrast to read as a
+deliberately-filled neutral zone, not blank space.
+**Why:** Caught via the headless-Chrome screenshot loop above: a real
+district's "Now" short-term status was 52% Near Normal, but the class-bar
+rendered as if only ~48% was filled, with the rest reading as plain white
+page background -- a real drought status was visually indistinguishable
+from missing data. Same problem in the long-term chart's middle reference
+band. The skill's documented gray is correct in the abstract (a diverging
+midpoint should recede relative to the vivid extremes) but was tuned
+against a different reference surface than this page's near-white
+background/surface tokens, so it over-receded to the point of invisibility
+here.
+**How to apply:** If the page's surface/background tokens ever change,
+re-check `--dc-c5` contrast against the new values -- it's a value picked
+for legibility against *this* specific background, not a portable
+constant.
 
 ### Site design v1: curated maps + our own class summaries + a hand-drawn long-term chart
 **Decision:** Added `scripts/report_content.py` and rewrote `build_site.py`'s

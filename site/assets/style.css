@@ -18,7 +18,12 @@
   --dc-c2: #fb6a4a;  /* Severe Drought D2 */
   --dc-c3: #fc9272;  /* Moderate Drought D1 */
   --dc-c4: #fcbba1;  /* Abnormally Dry D0 */
-  --dc-c5: #f0efec;  /* Near Normal */
+  --dc-c5: #cdccc4;  /* Near Normal -- deliberately more visible than the
+                         skill's literal diverging-midpoint gray (#f0efec):
+                         that value was nearly invisible against this page's
+                         near-white surface/background, making a real
+                         "near normal" class-bar segment or chart band read
+                         as empty/no-data instead of a filled neutral zone. */
   --dc-c6: #9ec5f4;  /* Abnormally Wet */
   --dc-c7: #6da7ec;  /* Moderately Wet */
   --dc-c8: #3987e5;  /* Severely Wet */
@@ -45,7 +50,7 @@
     --dc-c2: #fb6a4a;
     --dc-c3: #fc9272;
     --dc-c4: #fcbba1;
-    --dc-c5: #383835;
+    --dc-c5: #4a4946;  /* same visibility fix as light mode, against #1a1a19/#0d0d0d */
     --dc-c6: #9ec5f4;
     --dc-c7: #6da7ec;
     --dc-c8: #3987e5;
@@ -100,6 +105,9 @@ ul { padding-left: 1.2em; }
   gap: 16px;
   margin: 16px 0;
 }
+.map-card { min-width: 0; }  /* grid items default to min-width:auto, which lets
+  the map image's intrinsic size force tracks wider than minmax()'s stated
+  minimum -- breaking the auto-fit column collapse at narrow widths */
 .map-card figure { margin: 0; }
 .map-card img {
   max-width: 100%;
