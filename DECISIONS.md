@@ -24,15 +24,16 @@ current setup/usage instructions.
       history before flipping visibility). Repo secrets (`CE_API_KEY`,
       `GW_ASSET_ID`, `IRR_ASSET_ID`) added, Pages source set to
       "GitHub Actions".
-- [ ] First Actions run: pipeline itself ran successfully end-to-end in
-      Actions (confirmed via the public API), but the "Commit state.json"
-      step failed on `git push` -- almost certainly the repo's Settings ->
-      Actions -> General -> "Workflow permissions" defaulting to
-      read-only, which caps what a workflow can do regardless of the
-      `permissions: contents: write` already set in the workflow YAML.
-      User was pointed to switch it to "Read and write permissions" and
-      re-run. Confirm the next run completes AND actually deploys to
-      Pages before trusting the cron.
+- [ ] First Actions run, take 2: after switching Settings -> Actions ->
+      "Workflow permissions" to read/write, re-ran -- pipeline itself
+      succeeded end-to-end in 49m30s (all 363 reports fetched, unattended,
+      in Actions), but "Commit state.json" still failed, this time in
+      <1s (rules out a timeout; it's an outright rejection). Since the
+      permissions fix didn't resolve it, likely a branch protection rule
+      on `main` blocking direct pushes rather than a token-scope issue.
+      Waiting on the actual step log text (API blocks log access without
+      admin auth, even for a public repo) to confirm before changing
+      anything else.
 - [x] Site design v1: per-org pages now show 3 curated current-conditions
       maps (USDM, short-term, long-term), plain-language drought-class
       summaries (now/3mo/1yr) for short-term, long-term, and USDM built
