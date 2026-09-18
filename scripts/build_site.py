@@ -117,15 +117,15 @@ PAGE_TEMPLATE = """<!doctype html>
 <p class="meta">{layer_title} &middot; report period ending {run_date} &middot; updated every 5 days from Climate Engine's gridMET Drought data.</p>
 {disclosure}
 <div class="intro-note">
-<p>This page summarizes how dry or wet conditions have been for <strong>{name}</strong> recently and over the long term, using drought indices computed from weather-station-based climate data (not a direct measurement of soil moisture or streamflow, but a well-established standard way to track drought). Everything on this page updates automatically every 5 days.</p>
+<p>This page shows how dry or wet conditions have been for <strong>{name}</strong>, both recently and over the long term. The drought indices are computed from weather-station climate data -- not a direct measurement of soil moisture or streamflow, but a standard way to track drought. It updates automatically every 5 days.</p>
 </div>
 
 <h2>Current conditions</h2>
-<p class="meta section-intro">Three ways of looking at this area's current drought status, each paired with the area it actually covers.</p>
+<p class="meta section-intro">Three views of this area's current drought status, each shown with its own area breakdown.</p>
 {condition_groups}
 
 <h2>Drought class evolution</h2>
-<p class="meta section-intro">How the drought classification above has changed continuously over roughly the last 13 months, not just the 3 snapshots above. Hover anywhere on a chart for the exact area breakdown on that date.</p>
+<p class="meta section-intro">How the classifications above have changed day by day over the last 13 months, not just at the three snapshots shown. Hover anywhere on a chart for the exact area breakdown on that date.</p>
 <div class="bokeh-grid">
 <div class="bokeh-chart">{stb_evolution_div}</div>
 <div class="bokeh-chart">{ltb_evolution_div}</div>
@@ -133,12 +133,12 @@ PAGE_TEMPLATE = """<!doctype html>
 </div>
 
 <h2>Long-term trend (1986&ndash;present)</h2>
-<p class="meta section-intro">Is the long-term drought picture here trending drier, wetter, or holding steady? One number per water year back to 1986 summarizing how that year compared to normal (positive/blue is wetter, negative/red is drier), with a Mann-Kendall trend line fit through them. Hover a point for its exact value; scroll to zoom.</p>
+<p class="meta section-intro">One number per water year back to 1986, summarizing how that year compared to normal. Positive/blue is wetter than normal, negative/red is drier. The dotted line is a Mann-Kendall trend fit through the points. Hover a point for its exact value; scroll to zoom.</p>
 <div class="bokeh-chart">{ltb_chart_div}{ltb_trend_caption}</div>
 
 <h2>Climate context</h2>
-<p class="meta section-intro">The raw climate data behind the drought indices above &mdash; evaporative demand, precipitation, and temperature &mdash; each compared against this area's own historical normal range, with its own long-term trend. Interactive: hover for exact values.</p>
-<p class="chart-question">How thirsty has the atmosphere been this year, compared to the historical range?</p>
+<p class="meta section-intro">The raw climate data behind the drought indices above: evaporative demand, precipitation, and temperature, each compared to this area's own historical range, with its own long-term trend. Hover any chart for exact values.</p>
+<p class="chart-question">How thirsty has the atmosphere been this year compared to the historical range?</p>
 <div class="bokeh-chart">{eto_chart_div}{eto_trend_caption}</div>
 <p class="chart-question">How does this year's precipitation compare to normal?</p>
 <div class="bokeh-chart">{precip_chart_div}{precip_trend_caption}</div>
@@ -151,7 +151,7 @@ PAGE_TEMPLATE = """<!doctype html>
 
 {explainer}
 
-<p class="footer-note">Built by the University of Idaho as part of a statewide drought-response project. Not an official regulatory product &mdash; for planning and awareness, not a substitute for your water right, delivery call, or mitigation plan records.</p>
+<p class="footer-note">Built by the University of Idaho as part of a statewide drought-response project. This is not an official regulatory product. Use it for planning and awareness, not as a substitute for your water right, delivery call, or mitigation plan records.</p>
 </div></main>
 {bokeh_script}
 </body>
@@ -195,7 +195,7 @@ HOME_TEMPLATE = """<!doctype html>
 <main><div class="wide">
 <div class="hero">
 <h1>{site_name}</h1>
-<p class="lede">Tailored, jurisdiction-specific drought conditions for {gw_count} Idaho groundwater districts and {irr_count} irrigation organizations &mdash; built on Climate Engine's gridMET Drought data, updated every 5 days.</p>
+<p class="lede">Drought conditions for {gw_count} Idaho groundwater districts and {irr_count} irrigation organizations, built on Climate Engine's gridMET Drought data and updated every 5 days.</p>
 <p class="meta">Report period ending {run_date}.</p>
 </div>
 
@@ -312,7 +312,7 @@ def _render_condition_group(
   <div class="snapshot-label">{snap['label']}<span class="snapshot-date">{snap['date'].isoformat()}</span></div>
   <div>
     {_render_class_bar(snap['pct'], classes)}
-    <p class="snapshot-headline">Mostly <strong>{dom.label}</strong> ({dom_pct:.0f}% of area). Hover a bar segment for the exact area of every class.</p>
+    <p class="snapshot-headline">Mostly <strong>{dom.label}</strong> ({dom_pct:.0f}% of area). Hover any segment to see the exact area for each class.</p>
   </div>
 </div>""".strip())
         data_html = f"{''.join(rows)}\n{_render_legend(classes)}"

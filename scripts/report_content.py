@@ -125,38 +125,35 @@ def read_eoy_series(csv_path: Path) -> list[tuple[int, float]]:
 # production process), written in lay language.
 
 SHORT_TERM_BACKGROUND_HTML = """
-<p class="section-background">Short-term conditions blend four indices that
-each respond within days to weeks of a change in weather: the <strong>Palmer
-Drought Severity Index (PDSI)</strong>, the <strong>Palmer Z-Index</strong>
-(PDSI's short-term moisture-anomaly building block), and the
-<strong>Standardized Precipitation Index</strong> at 30- and 90-day windows
-(SPI-30d, SPI-90d). Because all four react quickly, a single wet or dry
-spell can shift this map from one report to the next &mdash; it answers
-"how has it been <em>lately</em>," not "are we in a multi-year drought."</p>
+<p class="section-background">Short-term conditions combine four indices
+that respond to weather within days or weeks: the <strong>Palmer Drought
+Severity Index (PDSI)</strong>, the <strong>Palmer Z-Index</strong> (PDSI's
+short-term component), and the <strong>Standardized Precipitation
+Index</strong> at 30- and 90-day windows (SPI-30d, SPI-90d). A single wet
+or dry spell can change this map from one report to the next. It shows
+recent conditions, not the multi-year picture.</p>
 """.strip()
 
 LONG_TERM_BACKGROUND_HTML = """
-<p class="section-background">Long-term conditions blend the same PDSI and
-Z-Index with the Standardized Precipitation Index computed over much
-longer windows &mdash; 6 months, 1 year, 2 years, and 5 years. Averaging
-over these longer windows means a single storm or dry month barely moves
-the result; this map instead reflects whether the past several years,
-cumulatively, have been wetter or drier than normal &mdash; closer to what
-matters for reservoir storage, groundwater recharge, and multi-year water
-planning than short-term conditions are.</p>
+<p class="section-background">Long-term conditions use the same PDSI and
+Z-Index, combined with the Standardized Precipitation Index at longer
+windows: 6 months, 1 year, 2 years, and 5 years. A single storm or dry
+month has little effect on these longer averages. This map shows whether
+the past several years have been wetter or drier than normal overall,
+which matters more for reservoir storage, groundwater recharge, and
+multi-year planning than short-term conditions do.</p>
 """.strip()
 
 USDM_BACKGROUND_HTML = """
-<p class="section-background">The U.S. Drought Monitor is produced jointly
-by the National Drought Mitigation Center (University of
+<p class="section-background">The U.S. Drought Monitor is produced by the
+National Drought Mitigation Center (University of
 Nebraska&ndash;Lincoln), NOAA, and the USDA, and updated every Thursday.
-Unlike the short- and long-term blends above, which are purely computed
-from climate data, USDM categories are set by a rotating panel of expert
-authors who combine numerical indices with on-the-ground reports &mdash;
-streamflow gauges, reservoir levels, soil moisture, and local observer
-input. It's also the index that triggers many USDA disaster-relief and
-crop-insurance programs, and the one most likely to match what's reported
-in the news.</p>
+The short- and long-term blends above are computed directly from climate
+data. USDM categories are set weekly by a panel of authors who combine
+those indices with ground reports: streamflow gauges, reservoir levels,
+soil moisture, and local observations. It's also the index that triggers
+USDA disaster-relief and crop-insurance programs, and the one most often
+cited in the news.</p>
 """.strip()
 
 
@@ -164,144 +161,138 @@ in the news.</p>
 
 EXPLAINER_HTML = """
 <h2>What these numbers mean</h2>
-<p class="meta section-intro">This section explains every index, chart, and term used on this page in plain language, roughly in the order they appear above.</p>
+<p class="meta section-intro">Definitions for every index, chart, and term on this page, in the order they appear above.</p>
 <dl class="glossary">
   <div class="glossary-entry">
-  <dt>Why these maps and charts, not just "is it a drought year"?</dt>
-  <dd>Drought isn't one thing -- a place can be short on recent rain but
-  fine on multi-year reservoir storage, or the reverse. This page
-  deliberately separates <strong>short-term</strong> conditions (did it
-  rain this month?) from <strong>long-term</strong> conditions
-  (has the last several years been dry overall?), because those two
-  situations call for different responses and are easy to confuse if
-  only one number is shown.</dd>
+  <dt>Why short-term and long-term are shown separately</dt>
+  <dd>A place can be short on recent rain while its multi-year reservoir
+  storage is fine, or the reverse. <strong>Short-term</strong> conditions
+  answer whether it's rained recently. <strong>Long-term</strong>
+  conditions answer whether the past several years have been dry overall.
+  Those call for different responses, so this page keeps them separate
+  instead of combining them into one number.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Short-term blend</dt>
-  <dd>Combines four drought indices sensitive to conditions over the last
-  30 days to about 9 months: the Palmer Drought Severity Index (PDSI), the
-  Palmer Z-Index, and the Standardized Precipitation Index at 30- and
-  90-day windows (SPI-30d, SPI-90d). It reflects recent, fast-moving
-  conditions -- a dry spell or a good storm shows up here within weeks.
-  Use it to answer "how has it been lately?"</dd>
+  <dd>Combines four drought indices that respond to conditions over the
+  last 30 days to about 9 months: the Palmer Drought Severity Index
+  (PDSI), the Palmer Z-Index, and the Standardized Precipitation Index at
+  30- and 90-day windows (SPI-30d, SPI-90d). It shows recent conditions --
+  a dry spell or a good storm shows up here within weeks.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Long-term blend</dt>
   <dd>Combines PDSI, the Z-Index, and SPI at 6-month, 1-year, 2-year, and
-  5-year windows. It reflects accumulated, slower-moving conditions --
-  multi-year drought or multi-year wet spells -- and changes more slowly
-  than the short-term blend, since a single wet month barely moves a
-  5-year average. Use it to answer "has this been part of a longer dry or
-  wet stretch?"</dd>
+  5-year windows. It changes slowly, since a single wet month has little
+  effect on a 5-year average, so it reflects whether the past several
+  years have been part of a longer dry or wet stretch.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>What do the PDSI, Z-Index, and SPI numbers actually measure?</dt>
   <dd><strong>PDSI</strong> (Palmer Drought Severity Index) estimates
-  cumulative moisture surplus/deficit using precipitation, temperature, and
-  a simple soil-moisture accounting model -- it's the oldest and most
-  widely known U.S. drought index. The <strong>Z-Index</strong> is PDSI's
-  short-term building block, essentially "this month's moisture anomaly"
-  before it accumulates into the fuller PDSI. <strong>SPI</strong>
-  (Standardized Precipitation Index) is simpler: it only looks at
-  precipitation, standardized so a value of 0 always means "average for
-  this time of year," -1 means notably drier than average, and +1 means
-  notably wetter -- the number after "SPI" (30d, 90d, 6mo, 1yr, 2yr, 5yr)
-  is the window it's averaged over. All three center on 0 = normal,
-  negative = dry, positive = wet, which is why the charts on this page use
-  red for negative and blue for positive throughout.</dd>
+  cumulative moisture surplus or deficit from precipitation, temperature,
+  and a soil-moisture accounting model. It's the oldest and most widely
+  used U.S. drought index. The <strong>Z-Index</strong> is PDSI's
+  short-term component: the moisture anomaly for the current month,
+  before it accumulates into PDSI. <strong>SPI</strong> (Standardized
+  Precipitation Index) looks only at precipitation: a value of 0 means
+  average for the time of year, -1 means notably drier than average, and
+  +1 means notably wetter. The number after "SPI" (30d, 90d, 6mo, 1yr,
+  2yr, 5yr) is the averaging window. All three center on 0 for normal,
+  negative for dry, and positive for wet, which is why the charts on this
+  page use red for negative and blue for positive.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>U.S. Drought Monitor (USDM)</dt>
-  <dd>The official weekly drought-classification map produced by NOAA,
-  USDA, and the National Drought Mitigation Center, shown here for the
-  same area for context alongside the short- and long-term blends above.
-  Unlike the blends (which are purely computed from climate data), USDM
-  categories are set weekly by expert authors who also weigh in local
-  reports on streamflow, reservoir levels, and observed impacts -- it's
-  the index most likely to match what you'd hear in the news or from
-  USDA/FSA disaster declarations.</dd>
+  <dd>The official weekly drought classification produced by NOAA, the
+  USDA, and the National Drought Mitigation Center, shown here alongside
+  the short- and long-term blends above. Those blends are computed
+  directly from climate data. USDM categories are set weekly by authors
+  who also review streamflow, reservoir levels, and observed impacts --
+  it's the index most likely to match USDA/FSA disaster declarations and
+  news reports.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Drought classes (D0-D4)</dt>
   <dd>D0 = Abnormally Dry, D1 = Moderate Drought, D2 = Severe Drought,
-  D3 = Extreme Drought, D4 = Exceptional Drought -- the standard USDM
-  severity scale, also used here to classify the short- and long-term
-  blend index values (an index below -2.0 is treated as D4-equivalent, and
-  so on; the exact cutoffs are in each chart's legend). On the wet side,
-  the same scale is mirrored: Abnormally Wet through Exceptionally Wet.</dd>
+  D3 = Extreme Drought, D4 = Exceptional Drought. This is the standard
+  USDM severity scale, also used here to classify the short- and
+  long-term blend values (an index below -2.0 counts as D4, and so on;
+  exact cutoffs are in each chart's legend). The wet side mirrors it:
+  Abnormally Wet through Exceptionally Wet.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Percentile</dt>
-  <dd>Where this year's value ranks against every other year on record for
-  this same location. A precipitation percentile of 20 means this year is
-  drier than 80% of years and wetter than only 20% -- low percentiles are
-  dry, high percentiles are wet, and 50 is exactly the historical median.</dd>
+  <dd>Where this year's value ranks against every other year on record
+  for this location. A precipitation percentile of 20 means this year is
+  drier than 80% of years on record and wetter than the remaining 20%.
+  Low percentiles are dry, high percentiles are wet, and 50 is the
+  historical median.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Water year</dt>
-  <dd>The 12-month period Oct 1 &ndash; Sep 30, labeled by the year it
-  ends in -- "water year 2026" runs Oct 1, 2025 through Sep 30, 2026. This
-  is the standard accounting period for Western water management, since it
-  starts at the beginning of the snow-accumulation season rather than the
-  calendar year.</dd>
+  <dd>The 12-month period from Oct 1 to Sep 30, labeled by the year it
+  ends in: water year 2026 runs Oct 1, 2025 through Sep 30, 2026. This is
+  the standard accounting period for water management in the western
+  U.S., since it starts at the beginning of the snow-accumulation season
+  rather than the calendar year.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>"This year vs. historical normal range" charts (ETo, precipitation, temperature)</dt>
-  <dd>The colored band is the range this location's climate data has shown
-  in past years for each point in the water year (the dark band is the
-  middle 50% of years, the light band the middle 90%); the solid line
-  traces this water year specifically. When the line sits above the band,
-  conditions are unusually warm/wet/high-demand for that time of year; below
-  the band, unusually cool/dry/low-demand.</dd>
+  <dd>The colored band shows the range this location's climate data has
+  covered in past years, for each point in the water year: the dark band
+  is the middle 50% of years, the light band the middle 90%. The solid
+  line traces this water year. When the line is above the band,
+  conditions are warmer, wetter, or higher-demand than usual for that
+  time of year; below the band, they're cooler, drier, or lower-demand.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Evaporative demand (ETo)</dt>
-  <dd>Reference evapotranspiration -- an estimate of how much water a
-  well-watered reference crop would lose to the atmosphere on a given day,
-  based on temperature, humidity, wind, and sunlight. It's a proxy for
-  "how thirsty is the atmosphere," independent of whether it actually
-  rained -- a hot, dry, windy stretch raises ETo even with no precipitation
-  at all, which is why it's tracked separately from precipitation rather
-  than combined into one number.</dd>
+  <dd>Reference evapotranspiration: an estimate of how much water a
+  well-watered reference crop would lose to the atmosphere on a given
+  day, based on temperature, humidity, wind, and sunlight. It measures
+  how much moisture the atmosphere is pulling out, independent of
+  whether it rained -- a hot, dry, windy stretch raises ETo even with no
+  precipitation, which is why it's tracked separately from
+  precipitation.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Water balance (precipitation &minus; evaporative demand)</dt>
-  <dd>A simple net moisture indicator: precipitation received minus water
-  the atmosphere is pulling out. A negative water balance doesn't
-  necessarily mean a crop was under-watered (irrigation supplies the
-  difference), but it does indicate how much the local climate itself was
-  able to supply versus how much extra demand irrigation had to cover.</dd>
+  <dd>Precipitation received minus water the atmosphere is pulling out.
+  A negative water balance doesn't necessarily mean a crop was
+  under-watered, since irrigation can supply the difference -- it shows
+  how much of that demand the local climate covered on its own, versus
+  how much irrigation had to make up.</dd>
   </div>
 
   <div class="glossary-entry">
   <dt>Trend and statistical significance</dt>
-  <dd>The trend notes on the charts above estimate how much each variable
-  has changed per decade using the Mann-Kendall trend test (paired with the
-  Sen's slope estimator for the rate itself), a standard method in climate
-  science chosen because it doesn't assume the data follows a smooth
-  statistical pattern the way simpler methods do. The "p-value" is the
-  chance that an apparent trend this size could show up in random
-  year-to-year noise even if there were no real underlying trend -- a
-  p-value under 0.05 is conventionally treated as "probably a real trend,
-  not just noise"; anything higher means the data doesn't clearly support a
-  trend either way, not that conditions are necessarily stable.</dd>
+  <dd>The trend notes on the charts above estimate how much each
+  variable has changed per decade, using the Mann-Kendall trend test and
+  the Sen's slope estimator for the rate. This method doesn't assume the
+  data follows a smooth statistical pattern, which is why it's standard
+  in climate science. The p-value is the probability that a trend this
+  size could appear by chance, with no real underlying trend behind it.
+  A p-value under 0.05 is conventionally treated as a real trend rather
+  than noise; anything higher means the data doesn't clearly support a
+  trend either way, not that conditions are stable.</dd>
   </div>
 </dl>
 <p class="source-note">Source data: Climate Engine's gridMET Drought
-product, built on the gridMET daily surface meteorological dataset. gridMET
-Drought is published on a 5-day (pentad) cadence, which is why this report
-updates every 5 days. The interactive charts on this page (drought class
-evolution, the normal-range climate charts, the long-term trend, and the
-statistics tables) are computed directly from that same data by this
-project, not copied from Climate Engine's own report images.</p>
+product, based on the gridMET daily surface meteorological dataset.
+gridMET Drought updates every 5 days, which sets this report's update
+cadence. The interactive charts on this page -- drought class evolution,
+the normal-range climate charts, the long-term trend, and the statistics
+-- are computed directly from that data, not copied from Climate
+Engine's report images.</p>
 """.strip()

@@ -98,6 +98,12 @@ current setup/usage instructions.
       content" decision below. Visually QA'd in light mode, dark mode, and
       mobile width (~500px) for both the homepage and a report page; no
       bugs found.
+- [x] Rewrote all on-page copy (glossary, section intros, per-group
+      background info, footer notes) to plain, direct language --
+      dropped rhetorical-question headers, "X isn't one thing" openers,
+      hedging parentheticals, and indirect "it's the index that..."
+      constructions. No factual/numeric content changed. See "Plain-
+      language copy pass" decision below.
 - [x] Major report-page redesign: paired current-conditions maps with
       their own area data, grouped drought-class legend, interactive
       hover-for-area class bars, per-section background info (USDM/short-
@@ -134,6 +140,42 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Plain-language copy pass: remove AI-sounding phrasing
+**Decision:** Rewrote every user-facing text block on the report page
+(the glossary in `report_content.py`'s `EXPLAINER_HTML`, the three
+per-section background paragraphs, and the section intros/footer/hero
+text in `build_site.py`'s templates) to plain, direct sentences, per
+explicit user request ("redo all language on the webpage to not sound
+AI-like... straightforward and plain language while being technically
+accurate"). Patterns removed:
+  - Rhetorical-question headers answered in the same breath (e.g. "Why
+    these maps and charts, not just 'is it a drought year'?") -> replaced
+    with a plain descriptive header ("Why short-term and long-term are
+    shown separately") stating the point directly.
+  - "X isn't one thing" and similar cliché openers.
+  - Hedging parentheticals like "(not a direct measurement of X, but a
+    well-established way to Y)" -> restated as a direct sentence.
+  - Indirect constructions ("it's the index most likely to...", "it's also
+    the index that...") -> restated with the subject doing the thing
+    directly.
+  - The repeated "Use it to answer 'how has it been lately?'" quote-gimmick
+    used identically in two glossary entries -> dropped in favor of just
+    stating what each blend shows.
+  - Reduced but did not eliminate em dashes -- kept where they're doing
+    real work (a single aside in a sentence), removed where stacked
+    (multiple em-dash clauses in one sentence).
+**Why -- no factual changes:** Every number, formula, and technical claim
+(PDSI/Z-Index/SPI definitions, USDM's NDMC/NOAA/USDA production process,
+water-year convention, trend methodology) is unchanged from the
+already-accurate versions written earlier this session -- this pass only
+touched sentence construction and word choice, verified by rebuilding and
+re-reading the rendered page rather than just diffing the Python source.
+**How to apply:** Any new user-facing copy added to this site should
+default to short, direct declarative sentences -- state the fact, then
+(if needed) the reason, rather than opening with a question or a hedge.
+Code comments and docstrings are exempt (not user-facing); this pass only
+touched HTML/template strings.
 
 ### Report page redesign: pairing, interactivity, trend integration
 **Decision:** A large, single coordinated redesign covering most of the
