@@ -98,6 +98,13 @@ current setup/usage instructions.
       content" decision below. Visually QA'd in light mode, dark mode, and
       mobile width (~500px) for both the homepage and a report page; no
       bugs found.
+- [x] Climate context charts (ETo/precipitation/temperature) stacked
+      full-width vertically instead of a multi-column grid, and their
+      historical bands (already real percentile data, P5-P95/P25-P75 from
+      actual gridMET daily values) explicitly labeled as such in the chart
+      legend and hover tooltip, not just described in the prose explainer
+      -- see "Offline design workflow" decision below, including the
+      date-rollover build gotcha found while doing this.
 - [ ] Site design open items remaining: no live/interactive current-
       conditions map (the 3 hero maps are still Climate Engine's static
       PNGs -- rebuilding those would mean redoing raster/geospatial
@@ -111,6 +118,34 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Offline design workflow: rebuild from cached data, no Actions run needed
+**Decision:** Design/layout iteration (CSS, chart labeling, templates) now
+happens entirely locally: `python scripts/build_site.py <run_date>`
+rebuilds `site/` in seconds from the already-cached
+`data/reports/extracted/<layer>/<run_date>/` payloads (no API calls), then
+`python3 -m http.server 8899` from `site/` serves it for a browser or the
+headless-Chrome screenshot QA loop. GitHub Actions is only needed to fetch
+*new* drought data (next 5-day cycle) or to actually deploy, never just to
+preview a design change.
+**Bug found and fixed while setting this up:** `build_site.py`'s CLI
+defaults `run_date` to `datetime.date.today()`, but the cached extracted
+data is dated `2026-09-16`; once the real calendar date rolled over to
+`2026-09-17` mid-session, `build(run_date="2026-09-17")` silently `continue`d
+past every layer (no matching `data/reports/extracted/<layer>/2026-09-17/`
+directory) and left every per-org report HTML untouched from an earlier
+build -- with **exit code 0 and no error output**, since the skip is a
+silent `continue`, not a raised exception. Two rebuilds' worth of changes
+(chart height, then percentile-band legend labels) appeared to do nothing
+because of this -- caught by checking the output HTML file's own mtime
+against the edit time, not just trusting a clean exit code.
+**How to apply:** For any local rebuild, pass the actual extracted-data
+date explicitly: `python scripts/build_site.py 2026-09-16` (or whatever
+`ls data/reports/extracted/groundwater_districts/` shows) -- don't rely on
+the no-arg default once real time has moved past the cached data's date.
+If this bites again, consider having `build()` warn loudly (not just
+`continue`) when a layer's extracted directory for the given `run_date`
+doesn't exist at all.
 
 ### Redesign: full-width layout + homepage selector + expanded lay content
 **Decision:** Combined user request: "use the full page not just the

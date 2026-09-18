@@ -23,7 +23,8 @@ from bokeh.resources import CDN
 from climate_charts import WATER_YEAR_CALENDAR
 
 FIG_WIDTH = 640
-FIG_HEIGHT = 300
+FIG_HEIGHT = 380  # charts are now stacked full-width, not in a ~420px grid
+# cell, so a taller aspect ratio reads better (see DECISIONS.md).
 BG = "#fcfcfb"
 GRID = "#e1e0d9"
 INK = "#0b0b0b"
@@ -91,17 +92,24 @@ def normal_band_figure(band: dict, *, title: str, y_label: str) -> figure:
         wd=band["wd"], mean=band["mean"], p5=band["p5"], p25=band["p25"],
         p75=band["p75"], p95=band["p95"],
     ))
-    fig.varea(x="wd", y1="p5", y2="p95", source=hist_src, fill_color=ACCENT_BAND, fill_alpha=0.12)
-    fig.varea(x="wd", y1="p25", y2="p75", source=hist_src, fill_color=ACCENT_BAND, fill_alpha=0.22)
-    fig.line(x="wd", y="mean", source=hist_src, line_color=ACCENT, line_width=1.5,
-              line_dash="dashed", legend_label="Historical mean")
+    fig.varea(x="wd", y1="p5", y2="p95", source=hist_src, fill_color=ACCENT_BAND, fill_alpha=0.12,
+              legend_label="Historical 5th–95th percentile")
+    fig.varea(x="wd", y1="p25", y2="p75", source=hist_src, fill_color=ACCENT_BAND, fill_alpha=0.22,
+              legend_label="Historical 25th–75th percentile")
+    mean_line = fig.line(x="wd", y="mean", source=hist_src, line_color=ACCENT, line_width=1.5,
+                          line_dash="dashed", legend_label="Historical mean")
 
     cur_src = ColumnDataSource(dict(wd=band["current_wd"], value=band["current_value"]))
     line = fig.line(x="wd", y="value", source=cur_src, line_color=CURRENT_COLOR, line_width=2,
                      legend_label=f"{band['current_water_year']} (this water year)")
     fig.scatter(x="wd", y="value", source=cur_src, size=5, color=CURRENT_COLOR, alpha=0)  # hover targets
 
-    fig.add_tools(HoverTool(renderers=[line], tooltips=[("Value", "@value{0.00}")], mode="vline"))
+    fig.add_tools(HoverTool(renderers=[mean_line], mode="vline", tooltips=[
+        ("Historical mean", "@mean{0.00}"),
+        ("25th–75th percentile", "@p25{0.00} – @p75{0.00}"),
+        ("5th–95th percentile", "@p5{0.00} – @p95{0.00}"),
+    ]))
+    fig.add_tools(HoverTool(renderers=[line], tooltips=[("This water year", "@value{0.00}")], mode="vline"))
     fig.legend.location = "top_left"
     fig.legend.background_fill_alpha = 0.7
     fig.legend.label_text_font_size = "10px"
