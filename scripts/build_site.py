@@ -285,84 +285,138 @@ def _ordinal(n: float) -> str:
     return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
 
 
+def _percentile_meter_row(label: str, unit: str, r: dict, *, low_label: str, high_label: str, concern_high: bool) -> str:
+    """One stat as a horizontal percentile meter instead of a table row:
+    a track colored with the site's diverging drought palette (the same
+    dry=red/wet=blue language used everywhere else on the page), a pin at
+    this year's percentile rank, and a marker at the 50th percentile as
+    the 'typical' reference point. concern_high=True means a HIGH
+    percentile is the drought-amplifying direction for this variable
+    (hotter, or more evaporative demand -> red at the high end);
+    concern_high=False means a LOW percentile is drought-amplifying
+    (less precipitation -> red at the low end). low_label/high_label are
+    this specific variable's own words for each end (e.g. "Cooler"/
+    "Warmer", not a generic "wetter"/"drier" that wouldn't fit ETo)."""
+    pct = max(0.0, min(100.0, r["percentile"]))
+    direction_class = "concern-high" if concern_high else "concern-low"
+    diff_class = "up" if r["diff"] > 0 else ("down" if r["diff"] < 0 else "")
+    diff_sign = "+" if r["diff"] > 0 else ""
+    return f"""
+<div class="pct-row">
+  <div class="pct-row-head">
+    <span class="pct-label">{label}</span>
+    <span class="pct-current">{r['current']:.1f}{unit}</span>
+    <span class="pct-diff {diff_class}">{diff_sign}{r['diff']:.1f}{unit} vs. average ({r['average']:.1f}{unit})</span>
+  </div>
+  <div class="pct-meter {direction_class}">
+    <span class="pct-meter-avg" style="left:50%" title="Historical average, same point in the water year"></span>
+    <span class="pct-meter-pin" style="left:{pct:.1f}%"></span>
+  </div>
+  <div class="pct-row-foot">
+    <span>{low_label}</span>
+    <span class="pct-rank">{_ordinal(r['percentile'])} percentile</span>
+    <span>{high_label}</span>
+  </div>
+</div>""".strip()
+
+
 def _render_summary_tables(gm_df, wy_df, current_water_year: int) -> str:
-    """Rebuild of Climate Engine's gm_temp_summary + gm_wb_summary tables:
-    current (year-to-date) value vs. the historical average through the
-    same point in the water year, diff, % of average, percentile rank.
-    See climate_charts.year_to_date_summary for the methodology, validated
+    """Rebuild of Climate Engine's gm_temp_summary + gm_wb_summary tables,
+    shown as percentile meters instead of a raw numbers table -- current
+    (year-to-date) value vs. the historical average through the same point
+    in the water year, plus a percentile rank. See
+    climate_charts.year_to_date_summary for the methodology, validated
     against Climate Engine's own published numbers in DECISIONS.md."""
     rows_temp = []
-    for label, var in [("High temp (°F)", "Tmax"), ("Low temp (°F)", "Tmin"), ("Mean temp (°F)", "Tmean")]:
+    for label, var in [("High temp", "Tmax"), ("Low temp", "Tmin"), ("Mean temp", "Tmean")]:
         r = year_to_date_summary(gm_df, var, current_water_year, cumulative=False)
         if r:
-            rows_temp.append((label, r))
+            rows_temp.append((label, "°F", r, "Cooler", "Warmer", True))
 
     rows_wb = []
-    for label, var in [("Precipitation (in)", "Precip"), ("Evap demand (in)", "ETo")]:
+    wb_specs = [
+        ("Precipitation", "Precip", "Drier", "Wetter", False),
+        ("Evap demand", "ETo", "Lower demand", "Higher demand", True),
+    ]
+    for label, var, low_label, high_label, concern_high in wb_specs:
         r = year_to_date_summary(gm_df, var, current_water_year, cumulative=True)
         if r:
-            rows_wb.append((label, r))
+            rows_wb.append((label, " in", r, low_label, high_label, concern_high))
 
     if not rows_temp and not rows_wb:
         return ""
 
-    def _table(title: str, rows: list[tuple[str, dict]]) -> str:
-        body = "".join(
-            f"<tr><td>{label}</td><td>{r['current']:.1f}</td><td>{r['average']:.1f}</td>"
-            f"<td>{r['diff']:+.1f}</td><td>{r['pct_of_avg']:.0f}%</td><td>{_ordinal(r['percentile'])}</td></tr>"
-            for label, r in rows
+    def _card(title: str, rows: list[tuple[str, str, dict, str, str, bool]]) -> str:
+        body = "\n".join(
+            _percentile_meter_row(label, unit, r, low_label=low_label, high_label=high_label, concern_high=concern_high)
+            for label, unit, r, low_label, high_label, concern_high in rows
         )
         return f"""
 <div class="stat-table">
   <h3>{title}</h3>
-  <table>
-    <thead><tr><th></th><th>This year</th><th>Average</th><th>Diff</th><th>% of avg</th><th>Percentile</th></tr></thead>
-    <tbody>{body}</tbody>
-  </table>
+  <p class="meta">This year to date vs. the historical average through the same point in the water year.</p>
+  {body}
 </div>""".strip()
 
     parts = []
     if rows_temp:
-        parts.append(_table("Temperature summary", rows_temp))
+        parts.append(_card("Temperature summary", rows_temp))
     if rows_wb:
-        parts.append(_table("Water balance summary", rows_wb))
+        parts.append(_card("Water balance summary", rows_wb))
     return "\n".join(parts)
 
 
 def _render_trend_table(wy_df) -> str:
-    """Rebuild of Climate Engine's gm_long_term_trends table: Mann-Kendall
-    trend + significance per decade for each water-year variable."""
+    """Rebuild of Climate Engine's gm_long_term_trends table, shown as a
+    grid of directional stat tiles instead of a raw numbers table:
+    Mann-Kendall trend + significance per decade for each water-year
+    variable."""
     if wy_df is None or wy_df.empty:
         return ""
     years = wy_df.index.to_numpy()
-    specs = [("High temp", "Tmax", "°F"), ("Low temp", "Tmin", "°F"),
-             ("Precipitation", "Precip", "in"), ("Evap demand", "ETo", "in")]
+    # bad_direction: which slope direction is drought-amplifying for this
+    # variable -- warming and rising evaporative demand are "up", but
+    # declining precipitation/net water balance is "down". Colors follow
+    # this (red=drought-amplifying, blue=drought-easing), not literal
+    # rising/falling, matching the percentile meters above (see
+    # DECISIONS.md "Chart sizing" / percentile-meter direction mapping).
+    specs = [("High temp", "Tmax", "°F", "up"), ("Low temp", "Tmin", "°F", "up"),
+             ("Precipitation", "Precip", "in", "down"), ("Evap demand", "ETo", "in", "up")]
     if "Precip" in wy_df.columns and "ETo" in wy_df.columns:
         wy_df = wy_df.copy()
         wy_df["Precip_minus_ETo"] = wy_df["Precip"] - wy_df["ETo"]
-        specs.append(("Precip − Evap demand", "Precip_minus_ETo", "in"))
+        specs.append(("Precip − Evap demand", "Precip_minus_ETo", "in", "down"))
 
-    rows = []
-    for label, col, unit in specs:
+    tiles = []
+    for label, col, unit, bad_direction in specs:
         if col not in wy_df.columns:
             continue
         t = mann_kendall_trend(years, wy_df[col].to_numpy())
         sig = t["pvalue"] < 0.05
-        rows.append(
-            f"<tr><td>{label}</td><td>{t['mean']:.1f} {unit}</td>"
-            f"<td>{t['slope_per_decade']:+.2f} {unit}/decade</td>"
-            f"<td class=\"{'sig' if sig else ''}\">{'* ' if sig else ''}p = {t['pvalue']:.3f}</td></tr>"
+        rising = t["slope_per_decade"] > 0
+        arrow = "▲" if rising else ("▼" if t["slope_per_decade"] < 0 else "▬")
+        actual_direction = "up" if rising else ("down" if t["slope_per_decade"] < 0 else None)
+        trend_class = "bad" if actual_direction == bad_direction else ("good" if actual_direction else "")
+        sig_html = (
+            f'<span class="trend-sig">significant trend (p={t["pvalue"]:.3f})</span>' if sig else
+            f'<span class="trend-nosig">not statistically significant (p={t["pvalue"]:.3f})</span>'
         )
-    if not rows:
+        tiles.append(f"""
+<div class="trend-tile">
+  <div class="trend-tile-label">{label}</div>
+  <div class="trend-tile-value {trend_class}"><span class="trend-arrow">{arrow}</span>{t['slope_per_decade']:+.2f} {unit}/decade</div>
+  <div class="trend-tile-avg">avg {t['mean']:.1f} {unit}</div>
+  {sig_html}
+</div>""".strip())
+    if not tiles:
         return ""
     return f"""
 <div class="stat-table">
   <h3>Long-term climate trends</h3>
-  <p class="meta">Mann-Kendall trend test; * marks a statistically significant trend (p &lt; 0.05).</p>
-  <table>
-    <thead><tr><th></th><th>Average</th><th>Trend</th><th>Significance</th></tr></thead>
-    <tbody>{''.join(rows)}</tbody>
-  </table>
+  <p class="meta">How much each variable has changed per decade since 1986, using the Mann-Kendall trend test.</p>
+  <div class="trend-grid">
+  {''.join(tiles)}
+  </div>
 </div>""".strip()
 
 

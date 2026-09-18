@@ -288,20 +288,93 @@ ul { padding-left: 1.3em; }
   box-shadow: var(--card-shadow);
 }
 .stat-table h3 { margin-top: 0; }
-.stat-table table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 0.95rem;
-}
-.stat-table th, .stat-table td {
-  text-align: right;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--gridline);
+
+/* Percentile meters (temperature/water-balance summary) -- a horizontal
+   track colored with the site's diverging drought palette instead of a
+   raw numbers table, so "how unusual is this" reads at a glance. */
+.pct-row { margin: 18px 0; }
+.pct-row:first-of-type { margin-top: 6px; }
+.pct-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
   font-variant-numeric: tabular-nums;
 }
-.stat-table th:first-child, .stat-table td:first-child { text-align: left; }
-.stat-table th { color: var(--text-secondary); font-weight: 600; }
-.stat-table .sig { color: var(--accent); font-weight: 700; }
+.pct-label { font-weight: 600; min-width: 110px; }
+.pct-current { font-size: 1.15rem; font-weight: 700; }
+.pct-diff { color: var(--text-secondary); font-size: 0.9rem; }
+.pct-diff.up { color: var(--dc-c1); }
+.pct-diff.down { color: var(--dc-c9); }
+.pct-meter {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+}
+/* concern-low: the LOW end of the range is drought-amplifying (e.g. low
+   precipitation), so red sits on the left. concern-high: the HIGH end is
+   drought-amplifying (e.g. high temperature or high evaporative demand),
+   so red sits on the right. Same red=concerning/blue=easing language as
+   the rest of the page, just anchored to whichever end is actually bad
+   for that specific variable. */
+.pct-meter.concern-low { background: linear-gradient(to right, var(--dc-c0), var(--dc-c5) 50%, var(--dc-c10)); }
+.pct-meter.concern-high { background: linear-gradient(to right, var(--dc-c10), var(--dc-c5) 50%, var(--dc-c0)); }
+.pct-meter-avg {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 20px;
+  background: var(--text-primary);
+  opacity: 0.35;
+  transform: translateX(-1px);
+}
+.pct-meter-pin {
+  position: absolute;
+  top: -4px;
+  width: 12px;
+  height: 22px;
+  border-radius: 3px;
+  background: var(--surface-1);
+  border: 2px solid var(--text-primary);
+  transform: translateX(-6px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.pct-row-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.pct-rank { font-weight: 600; color: var(--text-secondary); }
+
+/* Trend tiles (long-term climate trends) */
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+.trend-tile {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+}
+.trend-tile-label { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+.trend-tile-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.trend-arrow { display: inline-block; margin-right: 4px; }
+.trend-tile-value.bad { color: var(--dc-c1); }
+.trend-tile-value.good { color: var(--dc-c9); }
+.trend-tile-avg { color: var(--text-muted); font-size: 0.85rem; margin: 2px 0 6px; }
+.trend-sig { display: inline-block; font-size: 0.78rem; font-weight: 700; color: var(--accent); }
+.trend-nosig { display: inline-block; font-size: 0.78rem; color: var(--text-muted); }
 
 .section-intro { max-width: 760px; }
 

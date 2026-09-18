@@ -23,8 +23,13 @@ from bokeh.resources import CDN
 from climate_charts import WATER_YEAR_CALENDAR
 
 FIG_WIDTH = 640
-FIG_HEIGHT = 380  # charts are now stacked full-width, not in a ~420px grid
-# cell, so a taller aspect ratio reads better (see DECISIONS.md).
+# frame_height (the plotted-data rectangle only, excluding title/toolbar/
+# axes/legend chrome) rather than a fixed total `height` -- this is what
+# actually makes charts LOOK the same size, since a fixed total `height`
+# stays equal even when one chart's legend eats into its plot area and
+# another has no legend at all (found via user feedback + direct DOM
+# measurement, see DECISIONS.md "Chart sizing").
+FIG_FRAME_HEIGHT = 320
 BG = "#fcfcfb"
 GRID = "#e1e0d9"
 INK = "#0b0b0b"
@@ -57,7 +62,7 @@ def _month_ticks() -> dict[int, str]:
 
 def _base_figure(title: str, y_label: str, **kwargs) -> figure:
     fig = figure(
-        title=title, height=FIG_HEIGHT, width=FIG_WIDTH,
+        title=title, frame_height=FIG_FRAME_HEIGHT, width=FIG_WIDTH,
         sizing_mode="stretch_width",  # fixed width overflowed its grid cell
         # (2-column layout, ~430px cells) instead of fitting it -- found via
         # screenshot QA, see DECISIONS.md.
@@ -110,11 +115,25 @@ def normal_band_figure(band: dict, *, title: str, y_label: str) -> figure:
         ("5th–95th percentile", "@p5{0.00} – @p95{0.00}"),
     ]))
     fig.add_tools(HoverTool(renderers=[line], tooltips=[("This water year", "@value{0.00}")], mode="vline"))
-    fig.legend.location = "top_left"
-    fig.legend.background_fill_alpha = 0.7
-    fig.legend.label_text_font_size = "10px"
-    fig.legend.border_line_color = None
+    _place_legend_below(fig)
     return fig
+
+
+def _place_legend_below(fig: figure) -> None:
+    """Moves the auto-built legend out of the plot frame into a compact
+    horizontal strip underneath it, instead of overlapping the data --
+    keeps the actual charted area the same visible size across every
+    chart regardless of how many legend entries it has (see DECISIONS.md
+    "Chart sizing")."""
+    legend = fig.legend[0]
+    legend.orientation = "horizontal"
+    legend.location = "center"
+    legend.background_fill_alpha = 0
+    legend.border_line_color = None
+    legend.label_text_font_size = "10px"
+    legend.spacing = 14
+    legend.margin = 4
+    fig.add_layout(legend, "below")
 
 
 def water_year_trend_figure(wy_df) -> figure:
@@ -141,10 +160,7 @@ def water_year_trend_figure(wy_df) -> figure:
         trend_y = trend["mean"] + slope_per_year * (years - years.mean())
         fig.line(years, trend_y, line_color=color, line_width=1, line_dash="dotted", alpha=0.7)
 
-    fig.legend.location = "center_left"
-    fig.legend.background_fill_alpha = 0.7
-    fig.legend.label_text_font_size = "10px"
-    fig.legend.border_line_color = None
+    _place_legend_below(fig)
     return fig
 
 
@@ -195,7 +211,7 @@ def class_evolution_figure(df, classes, title: str) -> figure:
     source = ColumnDataSource(df.reset_index())
 
     fig = figure(
-        title=title, height=FIG_HEIGHT, width=FIG_WIDTH, sizing_mode="stretch_width",
+        title=title, frame_height=FIG_FRAME_HEIGHT, width=FIG_WIDTH, sizing_mode="stretch_width",
         x_axis_type="datetime", background_fill_color=BG, border_fill_color=BG,
         tools="pan,box_zoom,wheel_zoom,reset,save", toolbar_location="above",
         y_range=(0, 100),

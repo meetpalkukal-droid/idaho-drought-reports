@@ -98,6 +98,13 @@ current setup/usage instructions.
       content" decision below. Visually QA'd in light mode, dark mode, and
       mobile width (~500px) for both the homepage and a report page; no
       bugs found.
+- [x] "This year vs. average" and "Long-term climate trends" stat tables
+      replaced with visual percentile meters and directional trend tiles
+      -- see "Visual stat displays" decision below.
+- [x] Chart sizing/legend fix: all Bokeh charts now use `frame_height`
+      (plot area only) instead of `height` (total box including chrome),
+      and the normal-band/water-year-trend charts' legends moved outside
+      the plot frame -- see "Chart sizing" decision below.
 - [x] Climate context charts (ETo/precipitation/temperature) stacked
       full-width vertically instead of a multi-column grid, and their
       historical bands (already real percentile data, P5-P95/P25-P75 from
@@ -118,6 +125,66 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Chart sizing: `frame_height` (plot area) instead of `height` (total box)
+**Decision:** All Bokeh figures (`_base_figure` and `class_evolution_figure`'s
+direct `figure()` call) now set `frame_height=FIG_FRAME_HEIGHT` (320px, the
+plotted-data rectangle only) instead of a fixed total `height`. The
+normal-band charts' (`normal_band_figure`) and the water-year-trend
+chart's legends, which previously overlapped the top-left corner of the
+plot, are now moved outside the frame into a compact horizontal strip
+below via a new `_place_legend_below()` helper (`fig.add_layout(legend,
+"below")`).
+**Why:** User asked for the climate-context charts to be "the same
+dimensions as the Long-term trend chart." Direct DOM measurement (a JS
+probe injected into the page, `getBoundingClientRect()` on every
+`.bokeh-chart` div) proved the outer boxes were already pixel-identical
+(828x402) even before this change -- all charts share the same `FIG_HEIGHT`
+constant. The real cause of the "different size" perception was that
+`normal_band_figure`'s in-frame legend (4 rows after the percentile
+labeling below) visually ate into its plotted area, while the Long-term
+chart has no legend at all and uses its full box for data. Switching to
+`frame_height` guarantees the actual charted rectangle is equal-sized
+across every chart regardless of legend/title/toolbar chrome, which is
+what a viewer actually perceives as "chart size" -- more so than the outer
+container box.
+**How to apply:** Any new chart type added to `bokeh_charts.py` should go
+through `_base_figure` (inherits `frame_height` automatically) rather than
+calling `figure()` directly with its own `height`/`width`. If it has a
+legend, call `_place_legend_below(fig)` after all glyphs are added so it
+doesn't silently start overlapping data again.
+
+### Visual stat displays instead of raw-number tables
+**Decision:** `_render_summary_tables()` (temperature/water-balance
+summary) now renders each variable as a horizontal percentile meter
+(`.pct-row`/`.pct-meter`) instead of a `<table>` row: current value, diff
+vs. average, a track colored with the site's diverging drought palette, a
+pin at this year's percentile rank, and a marker at the 50th percentile.
+`_render_trend_table()` (long-term climate trends) now renders a grid of
+directional stat tiles (`.trend-tile`) with an up/down arrow, colored red
+or blue, instead of a table row with a `p=` column.
+**Why -- color semantics needed a variable-specific flag, not a fixed
+rule:** A naive "high value = red, low value = blue" (or "rising trend =
+red, falling = blue") is wrong for roughly half these variables. Red is
+meant to mean "drought-amplifying," which is the HIGH end for temperature
+and evaporative demand (hotter / thirstier atmosphere = concerning) but
+the LOW end for precipitation and net water balance (less rain =
+concerning). Every percentile meter takes an explicit
+`concern_high: bool` and its own `low_label`/`high_label` text (e.g.
+"Lower demand"/"Higher demand" for ETo, not a generic "wetter"/"drier"
+that wouldn't fit); every trend tile takes an explicit `bad_direction`
+("up" or "down") and colors relative to whether the actual slope matches
+it, not relative to literal sign. **Caught via visual QA, not assumed
+correct on the first pass:** the first build had Precipitation's and
+Precip-Evap-demand's *declining* trends rendered in blue (reassuring)
+instead of red (concerning) because the initial version colored by literal
+rising/falling; fixed by adding the `bad_direction` parameter before this
+shipped.
+**How to apply:** If a new variable is added to either function, explicitly
+decide and set its concern direction (which end/sign is drought-amplifying
+for THAT variable) -- never reuse the literal high/rising=red default, and
+never reuse the temperature-specific "cooler"/"warmer" footer labels for a
+non-temperature variable.
 
 ### Offline design workflow: rebuild from cached data, no Actions run needed
 **Decision:** Design/layout iteration (CSS, chart labeling, templates) now
