@@ -136,10 +136,12 @@ def _place_legend_below(fig: figure) -> None:
     fig.add_layout(legend, "below")
 
 
-def water_year_trend_figure(wy_df) -> figure:
+def water_year_trend_figure(wy_df) -> tuple[figure, dict]:
     """Annual Precip & ETo totals since the data begins, each with a
-    linear trend line -- rebuild of Climate Engine's
-    gm_wy_precip_eto_trends chart."""
+    Mann-Kendall trend line -- rebuild of Climate Engine's
+    gm_wy_precip_eto_trends chart. Returns (figure, {"Precip": trend_dict,
+    "ETo": trend_dict}) so build_site.py can build a matching HTML caption
+    from the exact same numbers instead of recomputing them."""
     from climate_charts import mann_kendall_trend
 
     fig = _base_figure("Water-Year Precipitation & ETo Trends", "Total (in)")
@@ -147,6 +149,7 @@ def water_year_trend_figure(wy_df) -> figure:
     fig.x_range.start = int(years.min()) - 1
     fig.x_range.end = int(years.max()) + 1
 
+    trends = {}
     specs = [("Precip", "#2a78d6", "Precipitation"), ("ETo", "#e34948", "Evaporative demand")]
     for col, color, label in specs:
         vals = wy_df[col].to_numpy()
@@ -156,22 +159,29 @@ def water_year_trend_figure(wy_df) -> figure:
         fig.add_tools(HoverTool(renderers=[line], tooltips=[(label, "@value{0.00} in"), ("Water year", "@year")]))
 
         trend = mann_kendall_trend(years, vals)
+        trends[col] = trend
         slope_per_year = trend["slope_per_decade"] / 10
         trend_y = trend["mean"] + slope_per_year * (years - years.mean())
         fig.line(years, trend_y, line_color=color, line_width=1, line_dash="dotted", alpha=0.7)
 
     _place_legend_below(fig)
-    return fig
+    return fig, trends
 
 
-def long_term_index_figure(series: list[tuple[int, float]]) -> figure:
+def long_term_index_figure(series: list[tuple[int, float]]) -> tuple[figure | None, dict | None]:
     """1986-present long-term drought blend index, one point per water
     year -- Bokeh rebuild of the hand-drawn SVG version (and of Climate
-    Engine's own ltb_eoy_timeseries chart)."""
+    Engine's own ltb_eoy_timeseries chart), with its own Mann-Kendall
+    trend line drawn on top (this is a trend line, not just a connected
+    time series -- per user request). Returns (figure, trend_dict)."""
     if not series:
-        return None
+        return None, None
+    from climate_charts import mann_kendall_trend
+    import numpy as np
+
     years = [y for y, _ in series]
     values = [v for _, v in series]
+    years_arr, values_arr = np.array(years), np.array(values)
 
     fig = _base_figure("Long-Term Drought Blend Index (1986–Present)", "Index value")
     fig.x_range.start = min(years) - 1
@@ -187,11 +197,19 @@ def long_term_index_figure(series: list[tuple[int, float]]) -> figure:
                   fill_alpha=alpha, line_width=0)
 
     src = ColumnDataSource(dict(year=years, value=values))
-    line = fig.line(x="year", y="value", source=src, line_color=ACCENT, line_width=2)
+    line = fig.line(x="year", y="value", source=src, line_color=ACCENT, line_width=2, legend_label="Index value")
     fig.scatter(x="year", y="value", source=src, size=6, color=ACCENT)
     fig.add_tools(HoverTool(renderers=[line], tooltips=[("Water year", "@year"), ("Index", "@value{+0.00}")]))
+
+    trend = mann_kendall_trend(years_arr, values_arr)
+    slope_per_year = trend["slope_per_decade"] / 10
+    trend_y = trend["mean"] + slope_per_year * (years_arr - years_arr.mean())
+    fig.line(years_arr, trend_y, line_color=INK, line_width=1.5, line_dash="dotted",
+              alpha=0.8, legend_label="Trend")
+
     fig.y_range.start, fig.y_range.end = -3, 3
-    return fig
+    _place_legend_below(fig)
+    return fig, trend
 
 
 def class_evolution_figure(df, classes, title: str) -> figure:

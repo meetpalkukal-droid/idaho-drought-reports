@@ -98,6 +98,15 @@ current setup/usage instructions.
       content" decision below. Visually QA'd in light mode, dark mode, and
       mobile width (~500px) for both the homepage and a report page; no
       bugs found.
+- [x] Major report-page redesign: paired current-conditions maps with
+      their own area data, grouped drought-class legend, interactive
+      hover-for-area class bars, per-section background info (USDM/short-
+      term/long-term), on-chart trend lines/captions (including a real
+      Mann-Kendall trend on the long-term index chart, not just a time
+      series), sentence-based percentile meters with a pin-adjacent
+      percentile label, 2-column glossary, larger base text, CSV downloads
+      removed -- see "Report page redesign: pairing, interactivity, trend
+      integration" decision below.
 - [x] "This year vs. average" and "Long-term climate trends" stat tables
       replaced with visual percentile meters and directional trend tiles
       -- see "Visual stat displays" decision below.
@@ -125,6 +134,83 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Report page redesign: pairing, interactivity, trend integration
+**Decision:** A large, single coordinated redesign covering most of the
+report page, per a detailed user spec given across several messages
+before any implementation started (user explicitly said "don't do
+anything yet, keep listening" while giving the full list). Changes:
+  - **Paired current-conditions groups** (`_render_condition_group` in
+    `build_site.py`, `.condition-group` in CSS): each map (short-term,
+    long-term, USDM) now sits side by side with its own area
+    breakdown/bars, instead of 3 maps in a row followed by 3 separate
+    summary blocks below. Collapses to 1 column under 820px.
+  - **Grouped legend** (`_render_legend`): dry classes cluster together
+    (mild-to-severe, D0->D4) and wet classes cluster together, with a
+    "Drought"/"Wet" group label, instead of one flat 11-swatch row.
+  - **Interactive class bars**: `.class-bar-seg` now carries
+    `data-tooltip`, shown via a custom CSS `::after`/`::before` tooltip on
+    hover/focus (not just the native `title=` fallback), with
+    `.class-bar:has(.class-bar-seg:hover)` lifting the container's
+    `overflow:hidden` so the tooltip isn't clipped.
+  - **Per-section background info**: `SHORT_TERM_BACKGROUND_HTML` /
+    `LONG_TERM_BACKGROUND_HTML` / `USDM_BACKGROUND_HTML` in
+    `report_content.py` -- real, specific methodology context (USDM's
+    NDMC/NOAA/USDA production process and Thursday update cadence; what
+    each blend actually combines) shown inline in each condition group,
+    not only in the glossary further down.
+  - **Trend lines/captions integrated near each chart**, replacing the
+    separate "Long-term climate trends" tile-grid section entirely:
+    `long_term_index_figure` and `water_year_trend_figure` now compute
+    and return their Mann-Kendall trend(s) alongside the figure (not just
+    a bare figure), so `build_site.py` reuses the exact same numbers for
+    both the on-chart dotted trend line and an HTML caption underneath
+    (`_trend_caption`). Tmax/Tmin/net-water-balance trends (no chart of
+    their own) surface as trailing notes on the relevant percentile-meter
+    rows instead. Each of the 4 climate-context charts also gets a
+    one-line framing question above it (`.chart-question`).
+  - **Percentile meters rewritten as sentences** (`_percentile_meter_row`):
+    "High temp was 62.2°F this year to date — 4.7°F above the 57.5°F
+    average, the 100th percentile on record," not a fragment. The
+    percentile number is now a floating label positioned right above the
+    pin itself (clamped to 6-94% so it stays on-track near the edges),
+    not fixed at the bar's horizontal midpoint -- the midpoint position
+    read as if the percentile value were always in the middle of the
+    range, which isn't what it means.
+  - **Temperature/water-balance summary cards side by side**
+    (`.pct-card-grid`, `repeat(auto-fit, minmax(420px, 1fr))`) instead of
+    stacked full-width, and the **glossary is now 2 CSS columns**
+    (`columns: 2`, each entry wrapped in `.glossary-entry` with
+    `break-inside: avoid`) instead of one narrow 820px column inside a
+    1400px page -- both address "a whole lot of white space... has to
+    scroll vertically a lot."
+  - **Base font size** raised from 112.5% to 118.75% (~19px) -- "make all
+    text larger."
+  - **CSV data-download section removed** entirely (`{csv_links}` and the
+    "Data" `<h2>` deleted from `PAGE_TEMPLATE`).
+**Why -- single coordinated pass, not incremental:** The user explicitly
+queued the full list across 4 messages before saying "go ahead with all,"
+specifically to avoid re-doing structural work piecemeal. Implemented in
+dependency order: data layer (`climate_charts.water_year_mean_series`, the
+one genuinely new computation needed -- Tmean has no water-year trend
+anywhere else since Climate Engine's own `gm_wy_timeseries.csv` doesn't
+carry it) -> chart builders (`bokeh_charts.py`) -> content
+(`report_content.py`) -> page assembly (`build_site.py`) -> CSS.
+**Verified, not assumed:** Full visual QA pass (light mode, dark mode,
+mobile ~500px) via the established headless-Chrome screenshot-then-Read
+loop confirmed: paired groups render and collapse correctly; the grouped
+legend actually clusters as 3 visual rows; trend captions carry correct
+red/blue semantics per variable (re-checked explicitly, since this exact
+bug -- literal rising/falling instead of a per-variable "which direction
+is bad" -- was caught and fixed once already this session, see "Visual
+stat displays" below); percentile pin labels stay on-track and readable
+even at the mobile-width extremes (0th/100th percentile rows).
+**How to apply:** `CONDITION_GROUPS` in `build_site.py` is now the single
+place that defines the 3 paired current-conditions groups (map prefix,
+title, description, background HTML, CSV name, class scheme) -- add a 4th
+group there, not by hand-editing template HTML. Any new trend number
+should go through `_trend_caption()` for consistent formatting/color
+logic, not a one-off implementation.
 
 ### Chart sizing: `frame_height` (plot area) instead of `height` (total box)
 **Decision:** All Bokeh figures (`_base_figure` and `class_evolution_figure`'s

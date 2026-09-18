@@ -114,6 +114,18 @@ def normal_band_data(
     }
 
 
+def water_year_mean_series(df: pd.DataFrame, variable: str, *, exclude_water_year: int) -> tuple[np.ndarray, np.ndarray]:
+    """Per-water-year MEAN of a daily gm_timeseries.csv variable (e.g.
+    Tmean, which -- unlike Precip/ETo -- isn't in Climate Engine's own
+    gm_wy_timeseries.csv, since it's a value we synthesize via add_tmean,
+    not one they publish at the water-year level). Excludes the current,
+    still-incomplete water year, matching how gm_wy_timeseries.csv only
+    ever contains complete water years (see _water_year's docstring)."""
+    sub = df[(df["Variable"] == variable) & (df["water_year"] != exclude_water_year)]
+    grouped = sub.groupby("water_year")["Value"].mean().sort_index()
+    return grouped.index.to_numpy(), grouped.to_numpy()
+
+
 def water_year_pivot(csv_path: Path) -> pd.DataFrame:
     """gm_wy_timeseries.csv (Variable, Value, WaterYear) -> wide DataFrame
     indexed by WaterYear with one column per variable."""
