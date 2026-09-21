@@ -2,13 +2,16 @@ name: Update drought reports
 
 on:
   schedule:
-    # Runs daily; run_pipeline.py itself no-ops unless >= 5 days have passed
-    # since the last successful run (tracked in data/reports/state.json).
+    # Runs daily; run_pipeline.py itself no-ops unless Climate Engine's
+    # gridMET Drought dataset has actually published a new pentad since
+    # our last successful run (checked live against Climate Engine's
+    # /metadata/dataset_dates endpoint, not guessed from a day count --
+    # see run_pipeline.py and DECISIONS.md "Data-driven cadence gate").
     - cron: "0 13 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "Run even if fewer than 5 days have passed"
+        description: "Run even if no new pentad has been published since the last run"
         type: boolean
         default: false
       limit:

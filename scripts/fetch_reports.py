@@ -63,6 +63,7 @@ import shutil
 import sys
 import time
 import zipfile
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -77,6 +78,25 @@ EXTRACTED_OUT_DIR = ROOT / "data" / "reports" / "extracted"
 API_BASE = "https://api.climateengine.org"
 FEATURE_COLLECTION_ENDPOINT = f"{API_BASE}/reports/drought/feature_collection"
 COORDINATES_ENDPOINT = f"{API_BASE}/reports/drought/coordinates"
+DATASET_DATES_ENDPOINT = f"{API_BASE}/metadata/dataset_dates"
+
+
+def get_latest_gridmet_drought_date(api_key: str) -> date:
+    """Queries Climate Engine's own dataset metadata for the actual max
+    date gridMET Drought pentad data is published through, instead of
+    guessing from a fixed day count. Confirmed live (see DECISIONS.md
+    "Data-driven cadence gate"): dataset=GRIDMET_DROUGHT returns e.g.
+    {"Data": {"min": "1980-01-05", "max": "2026-09-12"}} -- that max value
+    is the real signal for "has a new pentad actually been published,"
+    which a blind N-days-since-last-run counter can never know."""
+    resp = requests.get(
+        DATASET_DATES_ENDPOINT,
+        params={"dataset": "GRIDMET_DROUGHT"},
+        headers={"Authorization": api_key},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return date.fromisoformat(resp.json()["Data"]["max"])
 
 LAYERS = {
     "groundwater_districts": "GW_ASSET_ID",

@@ -98,6 +98,11 @@ current setup/usage instructions.
       content" decision below. Visually QA'd in light mode, dark mode, and
       mobile width (~500px) for both the homepage and a report page; no
       bugs found.
+- [x] Cadence gate replaced with a live data-availability check instead of
+      a fixed day-count guess -- see "Data-driven cadence gate" decision
+      below. Also surfaced and cleared up a real gap: state.json's
+      "last_run" had drifted to a manual force-run from 2026-09-18 that
+      was never re-verified against the live site afterward.
 - [x] Rewrote all on-page copy (glossary, section intros, per-group
       background info, footer notes) to plain, direct language --
       dropped rhetorical-question headers, "X isn't one thing" openers,
@@ -140,6 +145,53 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Data-driven cadence gate: check Climate Engine directly, don't guess
+**Decision:** `run_pipeline.py` no longer gates on "has it been >= 5 days
+since our last successful run" (a blind day counter). It now calls a new
+`fetch_reports.get_latest_gridmet_drought_date()`, which hits Climate
+Engine's own `GET /metadata/dataset_dates?dataset=GRIDMET_DROUGHT`
+endpoint and reads the real `max` date gridMET Drought is published
+through. `data/reports/state.json` now stores that actual data date
+(`last_data_date`) instead of a run date (`last_run`); the pipeline runs
+only when the live `max` date differs from what's stored, i.e. a genuinely
+new pentad has been published. `run_date` everywhere downstream (the API
+`end_date` param, the local `extracted/<layer>/<run_date>/` folder name,
+and the "report period ending" text on the site) is now this same real
+data date, not `date.today()`.
+**Why:** User asked directly for "a system where we know exactly when new
+data is available," not an approximation. Confirmed live via a direct API
+call (`curl .../metadata/dataset_dates?dataset=GRIDMET_DROUGHT`) that this
+endpoint is real and returns e.g. `{"min": "1980-01-05", "max":
+"2026-09-12"}` -- and that gridMET Drought's actual publication lag is
+larger than assumed: on 2026-09-21, plain `GRIDMET` (the raw met dataset)
+was current through 2026-09-17 (4 days behind), but `GRIDMET_DROUGHT` (the
+derived drought product, needs a full pentad of the raw data to compute)
+was only current through 2026-09-12 -- 9 days behind wall-clock, a full
+pentad behind raw gridMET itself. A fixed "5 days since last run" counter
+has no way to detect this kind of lag; it would confidently try to fetch
+data that doesn't exist yet, or sit a day late/early relative to the
+dataset's actual publication moment.
+**Also fixes a real bug as a side effect:** using the actual data date as
+`run_date` (rather than `today.isoformat()`) means the local
+`extracted/<layer>/<run_date>/` folder name always matches what
+`build_site.py` expects by default -- eliminating the exact class of
+footgun already documented in "Offline design workflow" below (where a
+local rebuild silently no-op'd because the system date had moved past the
+cached data's folder name).
+**How it fails safely:** No silent fallback to the old guess-based logic
+was added on purpose -- if the metadata call itself fails (network issue,
+API change), the run fails loudly and visibly in the Actions log rather
+than quietly reverting to an approximation, and the daily cron retries
+the next day regardless.
+**How to apply:** Don't reintroduce a day-count gate. If a different
+dataset's cadence ever needs the same treatment, follow the same pattern:
+find its real `/metadata/dataset_dates` `dataset=` identifier by testing
+candidates against the live API (there's no enum in the OpenAPI spec, and
+guesses like `gridmetdrought_pentad_4000` -- the dataset's *page slug* on
+climateengine.org -- return `"Invalid dataset"`; `GRIDMET_DROUGHT` is the
+correct query-param value), don't assume the docs page slug is the query
+value.
 
 ### Plain-language copy pass: remove AI-sounding phrasing
 **Decision:** Rewrote every user-facing text block on the report page
