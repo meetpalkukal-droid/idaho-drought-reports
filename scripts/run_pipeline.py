@@ -18,7 +18,7 @@ import argparse
 import json
 import os
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fetch_reports import run_layer, run_geometry_fallback, get_latest_gridmet_drought_date, list_failed_sites, LAYERS
@@ -69,11 +69,23 @@ def main() -> None:
         return
 
     run_date = latest_available.isoformat()
-    print(f"gridMET Drought data available through {run_date}; running the pipeline for that date.")
+    # The value actually sent to Climate Engine as end_date must NOT equal
+    # latest_available exactly -- confirmed via a direct A/B test that an
+    # exact-match end_date truncates the response back one full pentad
+    # early (short/long-term blend timeseries end 5 days before what was
+    # requested). Padding it past the target pentad's boundary (matching
+    # what Climate Engine's own default end_date resolves to when none is
+    # given at all) avoids this while still pinning one deterministic
+    # value for the whole ~20-30 min async run. See DECISIONS.md "end_date
+    # truncation bug". run_date (the true pentad date) is still used for
+    # local folder naming and the site's displayed report period.
+    api_end_date = (latest_available + timedelta(days=3)).isoformat()
+    print(f"gridMET Drought data available through {run_date}; running the pipeline for that date "
+          f"(requesting end_date={api_end_date} to avoid Climate Engine's truncation quirk).")
 
     all_failures: dict[str, list[str]] = {}
     for layer in LAYERS:
-        run_layer(layer, limit=args.limit, end_date=run_date)
+        run_layer(layer, limit=args.limit, end_date=run_date, api_end_date=api_end_date)
         # Two automatic retry passes, with a short backoff between them:
         # transient failures (concurrency-limit errors, network blips) are
         # expected at some rate every run -- see DECISIONS.md "Second
@@ -83,18 +95,18 @@ def main() -> None:
         # give whatever caused the transient failure room to clear before
         # trying again.
         time.sleep(RETRY_BACKOFF_S)
-        run_layer(layer, limit=args.limit, end_date=run_date, retry_failed=True)
+        run_layer(layer, limit=args.limit, end_date=run_date, api_end_date=api_end_date, retry_failed=True)
         # Anything still failing with one of the two confirmed-fixable
         # error messages (a Climate Engine server-side bug on complex
         # geometries, or gridMET's 4km grid missing tiny polygons) gets
         # resubmitted via the coordinates endpoint instead -- see
         # DECISIONS.md and the fetch_reports.py module docstring.
-        run_geometry_fallback(layer, end_date=run_date)
+        run_geometry_fallback(layer, end_date=run_date, api_end_date=api_end_date)
         # A last retry pass catches anything the fallback didn't touch
         # (a different, unrecognized error) that might still just be
         # transient.
         time.sleep(RETRY_BACKOFF_S)
-        run_layer(layer, limit=args.limit, end_date=run_date, retry_failed=True)
+        run_layer(layer, limit=args.limit, end_date=run_date, api_end_date=api_end_date, retry_failed=True)
 
         failures = list_failed_sites(layer, run_date)
         if failures:

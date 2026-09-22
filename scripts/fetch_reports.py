@@ -361,6 +361,7 @@ def run_layer(
     *,
     limit: int | None,
     end_date: str | None,
+    api_end_date: str | None = None,
     max_in_flight: int = DEFAULT_MAX_IN_FLIGHT,
     retry_failed: bool = False,
 ) -> None:
@@ -382,6 +383,16 @@ def run_layer(
     all_names = gdf["name"].tolist()
 
     run_date = end_date or time.strftime("%Y-%m-%d")
+    # api_end_date is what actually gets sent to Climate Engine as
+    # end_date; run_date/end_date only names the local folder. These must
+    # NOT be the same value in general -- confirmed via a direct A/B test
+    # that requesting end_date exactly equal to the latest published
+    # pentad date truncates the response back one full pentad early (see
+    # DECISIONS.md "end_date truncation bug"). Callers that want the old
+    # single-value behavior (e.g. ad-hoc manual runs) can just leave
+    # api_end_date unset, since it then falls back to end_date.
+    if api_end_date is None:
+        api_end_date = end_date
     raw_dir = RAW_OUT_DIR / layer / run_date
     extracted_dir = EXTRACTED_OUT_DIR / layer / run_date
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -401,7 +412,7 @@ def run_layer(
     job_specs = [
         (name, lambda n=name: submit_report(
             asset_id=asset_id, site_name=n, filter_value=n, filter_by="name",
-            api_key=api_key, user_email=user_email, end_date=end_date,
+            api_key=api_key, user_email=user_email, end_date=api_end_date,
         ))
         for name in names
     ]
@@ -427,6 +438,7 @@ def run_geometry_fallback(
     layer: str,
     *,
     end_date: str | None,
+    api_end_date: str | None = None,
     max_in_flight: int = DEFAULT_MAX_IN_FLIGHT,
 ) -> None:
     """Resubmit, via /reports/drought/coordinates, any polygon still failing
@@ -441,6 +453,8 @@ def run_geometry_fallback(
     gdf = gpd.read_file(geojson_path).set_index("name")
 
     run_date = end_date or time.strftime("%Y-%m-%d")
+    if api_end_date is None:  # see run_layer's matching comment
+        api_end_date = end_date
     raw_dir = RAW_OUT_DIR / layer / run_date
     extracted_dir = EXTRACTED_OUT_DIR / layer / run_date
 
@@ -484,7 +498,7 @@ def run_geometry_fallback(
     job_specs = [
         (name, lambda n=name, k=kind: submit_report_coordinates(
             geometry=_geometry_for(n, k), site_name=n,
-            api_key=api_key, user_email=user_email, end_date=end_date,
+            api_key=api_key, user_email=user_email, end_date=api_end_date,
         ))
         for name, kind in targets
     ]

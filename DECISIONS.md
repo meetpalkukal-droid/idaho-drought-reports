@@ -7,6 +7,15 @@ current setup/usage instructions.
 
 ## Open items
 
+- [x] Every report's "Now" data was showing gridMET Drought's PREVIOUS
+      pentad, not the current one, for a completely different reason than
+      the missing-districts issue below: requesting `end_date` exactly
+      equal to the latest published date truncates Climate Engine's
+      response back one full pentad. Confirmed via a direct A/B test and
+      fixed by padding the requested end_date a few days past the target
+      pentad -- see "end_date truncation bug" decision below. This
+      affected ALL 65 reports' short-/long-term blend data, not just the
+      6 that were missing entirely.
 - [x] 6/13 groundwater districts (Bingham, Carey Valley, Galena, Henrys
       Fork, Raft River, South Valley) 404'd on the live site after the
       first data-gated run -- root cause confirmed (transient failures
@@ -152,6 +161,51 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### end_date truncation bug: pad past the target pentad, never match exactly
+**Decision:** `fetch_reports.py`'s `run_layer()` and `run_geometry_fallback()`
+now take two separate date parameters: `end_date` (used only for local
+folder naming -- `extracted/<layer>/<end_date>/` -- and the site's
+displayed report period) and a new `api_end_date` (what's actually sent
+to Climate Engine as the request's `end_date` field; falls back to
+`end_date` if not given, for backward-compatible manual/CLI use).
+`run_pipeline.py` now sets `run_date = latest_available` (the true pentad
+date, from `get_latest_gridmet_drought_date()`) but
+`api_end_date = latest_available + 3 days`.
+**Why:** User noticed the site's "Short-term conditions: Now" date
+(2026-09-07) looked stale next to the gridMET Drought max date we'd just
+confirmed (2026-09-12), and separately found a real Climate Engine PDF
+report (Arizona State Office, a genuine reference example) where the
+report's title date and its "Current" table date matched exactly with no
+lag -- which contradicted the "this is just an inherent lag, matches
+Climate Engine's own site" explanation given initially. That explanation
+was wrong; investigated properly instead of standing by it:
+  - Downloaded the actual report generated earlier this session (Bingham
+    Ground Water District, requested with `end_date=2026-09-12` --
+    exactly matching the raw dataset's own published max). Its
+    `stb_timeseries.csv`/`ltb_timeseries.csv` end at 2026-09-07, and
+    Climate Engine's own `ltb_table` image literally prints "Current**
+    (2026-09-07)" -- five days short of what was requested.
+  - Ran a direct A/B test: the exact same polygon, submitted with NO
+    `end_date` parameter at all. Climate Engine's own echoed default
+    resolved to `"end_date":"2026-09-15"`, and *that* report's
+    `stb_timeseries.csv`/`ltb_timeseries.csv` correctly extended through
+    2026-09-12 -- proving the 09-12 pentad was genuinely available and
+    returnable the whole time, and that requesting `end_date` as an exact
+    match to the latest published date is what causes the API to
+    truncate one pentad early (an off-by-one/exclusive-boundary quirk in
+    Climate Engine's own filtering, not a data-availability limit).
+  - This also retroactively explains why the *original* pre-session
+    pipeline code (which used wall-clock `date.today()` as `end_date`,
+    always naturally later than any real pentad boundary) never hit this
+    bug -- only today's new precise-pentad-date gating logic introduced
+    the exact-match condition that triggers it.
+**How to apply:** Never pass `get_latest_gridmet_drought_date()`'s return
+value directly as the API request's `end_date` -- always pad it forward
+(3 days is confirmed sufficient; matches Climate Engine's own observed
+default behavior). If a future change ever removes this padding, the
+symptom to watch for is every report's blend "Current" date reading one
+pentad older than the dataset's actual published max.
 
 ### Second retry pass and a visible failure log
 **Decision:** `run_pipeline.py` now runs `run_layer(..., retry_failed=True)`
