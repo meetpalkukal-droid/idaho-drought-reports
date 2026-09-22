@@ -17,14 +17,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from datetime import date
 from pathlib import Path
 
-from fetch_reports import run_layer, run_geometry_fallback, get_latest_gridmet_drought_date, LAYERS
+from fetch_reports import run_layer, run_geometry_fallback, get_latest_gridmet_drought_date, list_failed_sites, LAYERS
 from build_site import build
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT / "data" / "reports" / "state.json"
+FAILURES_PATH = ROOT / "data" / "reports" / "last_run_failures.json"
+RETRY_BACKOFF_S = 45
 
 
 def load_state() -> dict:
@@ -68,21 +71,45 @@ def main() -> None:
     run_date = latest_available.isoformat()
     print(f"gridMET Drought data available through {run_date}; running the pipeline for that date.")
 
+    all_failures: dict[str, list[str]] = {}
     for layer in LAYERS:
         run_layer(layer, limit=args.limit, end_date=run_date)
-        # One automatic retry pass: transient failures (concurrency-limit
-        # errors, network blips) are expected at some rate every run -- see
-        # DECISIONS.md. This mops most of them up without manual intervention.
+        # Two automatic retry passes, with a short backoff between them:
+        # transient failures (concurrency-limit errors, network blips) are
+        # expected at some rate every run -- see DECISIONS.md "Second
+        # retry pass". A single immediate retry wasn't enough in practice
+        # (confirmed: a site that failed twice in one run succeeded on a
+        # plain manual retry minutes later), so this backs off briefly to
+        # give whatever caused the transient failure room to clear before
+        # trying again.
+        time.sleep(RETRY_BACKOFF_S)
         run_layer(layer, limit=args.limit, end_date=run_date, retry_failed=True)
-        # Anything still failing after the retry pass with one of the two
-        # confirmed-fixable error messages (a Climate Engine server-side bug
-        # on complex geometries, or gridMET's 4km grid missing tiny
-        # polygons) gets resubmitted via the coordinates endpoint instead --
-        # see DECISIONS.md and the fetch_reports.py module docstring.
+        # Anything still failing with one of the two confirmed-fixable
+        # error messages (a Climate Engine server-side bug on complex
+        # geometries, or gridMET's 4km grid missing tiny polygons) gets
+        # resubmitted via the coordinates endpoint instead -- see
+        # DECISIONS.md and the fetch_reports.py module docstring.
         run_geometry_fallback(layer, end_date=run_date)
+        # A last retry pass catches anything the fallback didn't touch
+        # (a different, unrecognized error) that might still just be
+        # transient.
+        time.sleep(RETRY_BACKOFF_S)
+        run_layer(layer, limit=args.limit, end_date=run_date, retry_failed=True)
+
+        failures = list_failed_sites(layer, run_date)
+        if failures:
+            print(f"WARNING: {len(failures)} {layer} report(s) still failed after all retry passes: {failures}")
+        all_failures[layer] = failures
 
     build(run_date=run_date)
     save_state(last_data_date=latest_available, checked_on=today)
+    FAILURES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FAILURES_PATH.write_text(json.dumps(all_failures, indent=2))
+    total_failed = sum(len(v) for v in all_failures.values())
+    if total_failed:
+        print(f"{total_failed} report(s) failed this cycle and are missing from the site -- see {FAILURES_PATH}.")
+    else:
+        print("All reports succeeded this cycle.")
 
 
 if __name__ == "__main__":

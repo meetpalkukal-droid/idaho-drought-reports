@@ -343,6 +343,19 @@ def _previously_failed_or_missing(raw_dir: Path, all_names: list[str]) -> list[s
     return [n for n, s in statuses.items() if s is None or s.get("status") != "success"]
 
 
+def list_failed_sites(layer: str, run_date: str) -> list[str]:
+    """Names that don't have a status:"success" file for this run_date --
+    the same check run_layer(retry_failed=True) uses to decide what to
+    resubmit, exposed publicly so run_pipeline.py can print an end-of-run
+    summary. This is the only way to see what actually failed without
+    downloading the raw-status Actions artifact (which needs a GitHub
+    token we don't have -- see DECISIONS.md "Second retry pass")."""
+    raw_dir = RAW_OUT_DIR / layer / run_date
+    geojson_path = PROCESSED_DIR / f"{layer}.json"
+    all_names = gpd.read_file(geojson_path)["name"].tolist()
+    return _previously_failed_or_missing(raw_dir, all_names)
+
+
 def run_layer(
     layer: str,
     *,

@@ -74,13 +74,17 @@ jobs:
       # site/ is a pure build artifact (regenerated fresh every run from
       # data/reports/extracted, itself regenerated fresh from the API) and
       # deployed straight to Pages below -- never committed to git (333
-      # polygons' worth of PNGs/CSVs is ~550MB; committing that every 5 days
-      # would balloon the repo by tens of GB/year). Only state.json, a few
-      # bytes, is tracked -- it's what tells us the pipeline actually ran
-      # this cycle (run_pipeline.py no-ops and leaves it untouched otherwise).
+      # polygons' worth of PNGs/CSVs is ~550MB; committing that every cycle
+      # would balloon the repo by tens of GB/year). state.json (a few bytes,
+      # the gridMET Drought data date this cycle covers) and
+      # last_run_failures.json (which site names, if any, are missing from
+      # this cycle after all retries -- see DECISIONS.md "Second retry
+      # pass") are the two small files that ARE tracked, since otherwise
+      # there's no way to see what failed without a GitHub token to pull the
+      # raw-status artifact below.
       - id: diff
         run: |
-          git add data/reports/state.json
+          git add data/reports/state.json data/reports/last_run_failures.json
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -92,11 +96,11 @@ jobs:
       # in the meantime (a manual push, or a second triggered run) -- without
       # this, git push fails outright with a non-fast-forward rejection, as
       # it did the first two times this workflow ran manually while the repo
-      # was also being actively developed against. state.json is the only
-      # file this job ever touches, so a conflict here would mean two
-      # concurrent report-fetch runs landed at the same moment -- rare
-      # enough that failing loudly (rather than silently resolving it) is
-      # the right behavior if it ever happens.
+      # was also being actively developed against. state.json and
+      # last_run_failures.json are the only files this job ever touches, so
+      # a conflict here would mean two concurrent report-fetch runs landed
+      # at the same moment -- rare enough that failing loudly (rather than
+      # silently resolving it) is the right behavior if it ever happens.
       - name: Commit state.json
         if: steps.diff.outputs.changed == 'true'
         run: |

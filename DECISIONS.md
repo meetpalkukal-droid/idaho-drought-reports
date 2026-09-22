@@ -7,6 +7,13 @@ current setup/usage instructions.
 
 ## Open items
 
+- [x] 6/13 groundwater districts (Bingham, Carey Valley, Galena, Henrys
+      Fork, Raft River, South Valley) 404'd on the live site after the
+      first data-gated run -- root cause confirmed (transient failures
+      that survived the single retry pass) and fixed with a second retry
+      pass plus a visible failure log; see "Second retry pass and a
+      visible failure log" decision below. Needs one more forced run to
+      actually backfill these 6 on the live site.
 - [x] Irrigation organization scope cut to 65 total polygons (13
       groundwater + 52 irrigation), from 363 -- see "Irrigation
       organization scope cut" decision below for the full rationale.
@@ -145,6 +152,50 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Second retry pass and a visible failure log
+**Decision:** `run_pipeline.py` now runs `run_layer(..., retry_failed=True)`
+**twice** per layer (once before `run_geometry_fallback`, once after),
+each preceded by a `RETRY_BACKOFF_S` (45s) pause, instead of a single
+immediate retry. A new `fetch_reports.list_failed_sites(layer, run_date)`
+is called at the end of each layer's passes; anything still missing is
+printed as a `WARNING` in the Action log and written to a new small
+tracked file, `data/reports/last_run_failures.json` (`{"groundwater_districts":
+[...], "irrigation_organizations": [...]}`), committed alongside
+`state.json` in the same workflow step.
+**Why:** The first run under the new data-driven cadence gate (2026-09-21)
+deployed with **6 of 13 groundwater districts missing** (Bingham, Carey
+Valley, Galena, Henrys Fork, Raft River, South Valley) -- caught because
+the user hit a 404 on one directly. Investigated properly instead of
+guessing:
+  - The pattern wasn't a clean alphabetical cutoff (present:
+    Aberdeen/Big Lost River/Bonneville-Jefferson/Jefferson Clark/Madison/
+    Magic Valley/North Snake; missing: the other 6, scattered through the
+    alphabet) -- ruling out a process-stopped-partway-through failure like
+    the historical "~78/350" incident, and pointing at real per-request
+    failures instead.
+  - Couldn't inspect the run's actual raw-status Actions artifact
+    (`raw-status-<run-id>`) -- downloading it requires a GitHub token via
+    an authenticated API call, and neither `gh` CLI nor a `GITHUB_TOKEN`
+    is available in this environment. This is the second time this gap has
+    mattered (see the original "~78/350" incident) -- the new
+    `last_run_failures.json` exists specifically to not need artifact
+    access to answer "did anything fail" going forward.
+  - Directly resubmitted the exact failing polygon (Bingham Ground Water
+    District) against the live API with no special handling: it
+    succeeded in ~2 minutes with **zero code changes**, on a **plain**
+    `feature_collection` call (not the coordinates-endpoint workaround the
+    two other known failure categories need). This confirms it wasn't a
+    geometry problem at all -- just a transient failure (concurrency,
+    a momentary EE hiccup) that happened to still be failing when the
+    pipeline's single retry pass ran, immediately after the first.
+**How to apply:** If sites are still missing after two retries plus the
+geometry fallback, check `data/reports/last_run_failures.json` first --
+don't assume it needs a new fallback category without evidence. If this
+recurs at a meaningful rate even with two retries, consider a longer
+`RETRY_BACKOFF_S` or a third pass before assuming it's a new, different
+failure mode needing its own diagnosis (the way the two `--geometry-fallback`
+categories were originally found).
 
 ### Data-driven cadence gate: check Climate Engine directly, don't guess
 **Decision:** `run_pipeline.py` no longer gates on "has it been >= 5 days
