@@ -62,6 +62,7 @@ SITE_DATA_DIR = SITE_DIR / "data"
 LAYER_TITLES = {
     "groundwater_districts": "Groundwater Districts",
     "irrigation_organizations": "Irrigation Organizations",
+    "water_districts": "Water Districts",
 }
 
 # Each "current conditions" group pairs one Climate Engine map image with
@@ -195,7 +196,7 @@ HOME_TEMPLATE = """<!doctype html>
 <main><div class="wide">
 <div class="hero">
 <h1>{site_name}</h1>
-<p class="lede">Drought conditions for {gw_count} Idaho groundwater districts and {irr_count} irrigation organizations, built on Climate Engine's gridMET Drought data and updated every 5 days.</p>
+<p class="lede">Drought conditions for {gw_count} Idaho groundwater districts, {irr_count} Surface Water Coalition irrigation organizations, and {wd_count} Idaho water districts, built on Climate Engine's gridMET Drought data and updated every 5 days.</p>
 <p class="meta">Report period ending {run_date}.</p>
 </div>
 
@@ -211,6 +212,7 @@ HOME_TEMPLATE = """<!doctype html>
 <div class="map-legend">
 <span><span class="swatch" style="background:#1d5fa8"></span>Groundwater districts</span>
 <span><span class="swatch" style="background:#1baf7a"></span>Irrigation organizations</span>
+<span><span class="swatch" style="background:#c9862a"></span>Water districts</span>
 </div>
 <div id="home-map"></div>
 <p class="meta" style="margin-top:10px;">Click a boundary to open its report.</p>
@@ -659,6 +661,7 @@ def build(run_date: str) -> None:
             run_date=run_date,
             gw_count=counts.get("groundwater_districts", 0),
             irr_count=counts.get("irrigation_organizations", 0),
+            wd_count=counts.get("water_districts", 0),
             header=_render_header(home_href="index.html", nav_html=""),
         ),
         encoding="utf-8",

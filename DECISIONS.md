@@ -7,6 +7,14 @@ current setup/usage instructions.
 
 ## Open items
 
+- [ ] Water districts added, irrigation orgs cut to SWC-only -- code is
+      done and pushed, but the pipeline will FAIL on the very first chunk
+      until the user completes the one remaining manual step: upload
+      `data/processed/water_districts.zip` to Earth Engine as a table
+      asset, set it to "Anyone can read", and add its asset ID as a new
+      `WD_ASSET_ID` GitHub Actions secret (same process as the original
+      `GW_ASSET_ID`/`IRR_ASSET_ID` setup). See "Add water districts, cut
+      irrigation orgs to SWC-only" decision below.
 - [x] Every report's "Now" data was showing gridMET Drought's PREVIOUS
       pentad, not the current one, for a completely different reason than
       the missing-districts issue below: requesting `end_date` exactly
@@ -161,6 +169,65 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Add water districts, cut irrigation orgs to SWC-only
+**Decision:** Added a new `water_districts` layer (Idaho Code 42-604 water
+districts, fetched live from IDWR's own ArcGIS REST service --
+`gis.idwr.idaho.gov/hosting/rest/services/Regulatory/WaterDistricts/MapServer`
+-- since there's no local shapefile for it, unlike the other two layers),
+filtered to `STATUS='Active'` (101 of 122 total; the 21 Inactive districts
+have no current watermaster/operations, so add nothing to a
+current-conditions site -- user-directed choice). `IRRIGATION_ORG_PRIORITY_LIST`
+cut from 52 names down to just the 7 Surface Water Coalition members,
+dropping the 45 acreage-ranked ones added in the original scope cut. New
+total: **13 groundwater + 7 irrigation (SWC) + 101 water districts = 121
+polygons**, up from 65.
+**Why -- the quota problem and the chunked-submission fix:** 121 polygons
+at the established ~2 requests/polygon (submit + retry/download traffic)
+is ~242 requests for one full cycle -- under the 500/day cap, but over the
+200/hour cap if it completes in under an hour, which the old 65-polygon
+run reliably did (~20-30 min). Rather than curating water districts down
+to fit one hour (as was done for irrigation orgs originally), the user
+chose to keep full coverage and spread the request volume across time
+instead: `run_pipeline.py` now splits the full polygon list into
+`CHUNK_COUNT` (3) roughly-equal contiguous chunks (`build_chunks()`) and
+fully processes one chunk -- initial submit + both retry passes +
+geometry fallback, i.e. everything that chunk needs -- before waiting
+`CHUNK_INTERVAL_MINUTES` (60) and moving to the next. This bounds each
+rolling hour's request volume to roughly one chunk's worth (~40 polygons
+x up to ~4 requests in the worst case = ~160), comfortably under 200,
+while still completing the whole cycle predictably (~2-3 hours after the
+scheduled start) rather than needing multiple separate triggers.
+**Implementation:**
+  - `fetch_reports.py`: `run_layer()` and `run_geometry_fallback()` gained
+    a `names_override` parameter so a single call can target just one
+    chunk's names within a layer instead of "all names" or "all
+    previously-failed names" -- critical for correctness, not just
+    convenience: without it, a later chunk's retry pass would also
+    re-scan (and potentially resubmit) names from earlier or not-yet-due
+    chunks.
+  - `prep_boundaries.py`: `SOURCES` changed from a dict of (shapefile
+    path, name column) tuples to a dict of loader callables, so
+    `water_districts` can use a live-fetch loader (`load_water_districts()`)
+    alongside the two shapefile-based loaders (`load_shapefile()`) through
+    the same downstream cleaning/validation/export pipeline. Water
+    district names combine `DISTRICT` + `DISTAME`, since `DISTAME` alone
+    isn't unique (e.g. three separate districts are all named "Birch
+    Creek") -- Climate Engine requires exactly one unique non-numeric
+    identifying column.
+  - The existing `IRR_ASSET_ID` Earth Engine asset did NOT need
+    re-uploading -- it still contains all 350 original irrigation
+    organizations; `feature_collection`'s name-based filtering only needs
+    the asset to *contain* the 7 SWC names, not be limited to them (same
+    reasoning as the original 363->65 cut). Water districts, being an
+    entirely new layer, DOES need a new asset -- see the Open Items entry
+    above for the manual upload step this decision is blocked on.
+**How to apply:** If the chunk count or interval ever needs tuning (e.g.
+request volume estimates prove wrong in practice), they're the two
+constants at the top of `run_pipeline.py`. Don't reduce
+`CHUNK_INTERVAL_MINUTES` without re-checking the actual per-chunk request
+count stays under 200 -- the whole point of chunking is bounding requests
+per rolling hour, not just spreading work over wall-clock time.
 
 ### end_date truncation bug: pad past the target pentad, never match exactly
 **Decision:** `fetch_reports.py`'s `run_layer()` and `run_geometry_fallback()`

@@ -1,11 +1,11 @@
 // Homepage entity selector: a search box (works everywhere), a Leaflet
 // map (click a boundary to open its report), and a list (grouped by
-// type) -- three ways to find the same 65 reports, per user request.
+// type) -- three ways to find the same reports, per user request.
 (function () {
   var DATA_URL = "data/map_boundaries.json";
-  var LAYER_LABELS = { groundwater_districts: "Groundwater District", irrigation_organizations: "Irrigation Organization" };
-  var LAYER_PATHS = { groundwater_districts: "groundwater_districts", irrigation_organizations: "irrigation_organizations" };
-  var LAYER_COLORS = { groundwater_districts: "#1d5fa8", irrigation_organizations: "#1baf7a" };
+  var LAYER_LABELS = { groundwater_districts: "Groundwater District", irrigation_organizations: "Irrigation Organization", water_districts: "Water District" };
+  var LAYER_PATHS = { groundwater_districts: "groundwater_districts", irrigation_organizations: "irrigation_organizations", water_districts: "water_districts" };
+  var LAYER_COLORS = { groundwater_districts: "#1d5fa8", irrigation_organizations: "#1baf7a", water_districts: "#c9862a" };
 
   function reportUrl(feature) {
     var p = feature.properties;

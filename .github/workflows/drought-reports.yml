@@ -31,6 +31,14 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    # Explicit, generous timeout: run_pipeline.py now deliberately spreads
+    # ~121 polygons across 3 chunks, 60 minutes apart (see run_pipeline.py
+    # and DECISIONS.md "Add water districts, cut irrigation orgs to
+    # SWC-only"), so a full run takes ~2-3 hours end to end, not ~20-30
+    # minutes like the old single-pass run. The default GitHub-hosted
+    # runner timeout (360 min) would likely cover this anyway, but this is
+    # set explicitly so it's not relying on an undocumented default.
+    timeout-minutes: 300
     outputs:
       site_changed: ${{ steps.diff.outputs.changed }}
     steps:
@@ -47,6 +55,7 @@ jobs:
           CE_API_KEY: ${{ secrets.CE_API_KEY }}
           GW_ASSET_ID: ${{ secrets.GW_ASSET_ID }}
           IRR_ASSET_ID: ${{ secrets.IRR_ASSET_ID }}
+          WD_ASSET_ID: ${{ secrets.WD_ASSET_ID }}
           # CE_USER_EMAIL intentionally not set here -- see fetch_reports.py docstring.
         run: |
           ARGS=""
@@ -92,8 +101,10 @@ jobs:
           fi
 
       # Rebase onto the current remote main before pushing: this job can run
-      # for ~50 minutes (the full 363-polygon fetch), and main may have moved
-      # in the meantime (a manual push, or a second triggered run) -- without
+      # for ~2-3 hours (the full ~121-polygon fetch, chunked to stay under
+      # the hourly quota -- see the timeout-minutes comment above), and main
+      # may have moved in the meantime (a manual push, or a second triggered
+      # run) -- without
       # this, git push fails outright with a non-fast-forward rejection, as
       # it did the first two times this workflow ran manually while the repo
       # was also being actively developed against. state.json and

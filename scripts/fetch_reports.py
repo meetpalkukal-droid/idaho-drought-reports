@@ -101,6 +101,7 @@ def get_latest_gridmet_drought_date(api_key: str) -> date:
 LAYERS = {
     "groundwater_districts": "GW_ASSET_ID",
     "irrigation_organizations": "IRR_ASSET_ID",
+    "water_districts": "WD_ASSET_ID",
 }
 
 # Individual jobs took ~2-5 min in testing.
@@ -364,6 +365,7 @@ def run_layer(
     api_end_date: str | None = None,
     max_in_flight: int = DEFAULT_MAX_IN_FLIGHT,
     retry_failed: bool = False,
+    names_override: list[str] | None = None,
 ) -> None:
     if layer not in LAYERS:
         raise SystemExit(f"unknown layer {layer!r}, expected one of {list(LAYERS)}")
@@ -381,6 +383,12 @@ def run_layer(
     geojson_path = PROCESSED_DIR / f"{layer}.json"
     gdf = gpd.read_file(geojson_path)
     all_names = gdf["name"].tolist()
+    if names_override is not None:
+        # Restricts this call to one chunk of the layer -- used by the
+        # 3-part quota-spreading strategy in run_pipeline.py, so a chunk's
+        # own retry pass only touches its own names, not the whole layer.
+        wanted = set(names_override)
+        all_names = [n for n in all_names if n in wanted]
 
     run_date = end_date or time.strftime("%Y-%m-%d")
     # api_end_date is what actually gets sent to Climate Engine as
