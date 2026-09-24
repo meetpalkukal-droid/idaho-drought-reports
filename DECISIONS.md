@@ -7,14 +7,24 @@ current setup/usage instructions.
 
 ## Open items
 
-- [ ] Water districts added, irrigation orgs cut to SWC-only -- code is
-      done and pushed, but the pipeline will FAIL on the very first chunk
-      until the user completes the one remaining manual step: upload
-      `data/processed/water_districts.zip` to Earth Engine as a table
-      asset, set it to "Anyone can read", and add its asset ID as a new
-      `WD_ASSET_ID` GitHub Actions secret (same process as the original
-      `GW_ASSET_ID`/`IRR_ASSET_ID` setup). See "Add water districts, cut
-      irrigation orgs to SWC-only" decision below.
+- [x] `WD_ASSET_ID` was set to the full Earth Engine Code Editor URL
+      (`https://code.earthengine.google.com/?asset=projects/...`) instead
+      of the bare asset path -- every water district submission failed
+      with "not a valid FeatureCollection... not found" as a result. User
+      corrected the secret to just `projects/ee-meetpalkukal/assets/water_districts`.
+      See "WD_ASSET_ID had the full URL, not the bare asset path" decision
+      below.
+- [ ] Water district timeouts under concurrent load + comma-in-name submit
+      bug: a real run after the asset-ID fix still failed to deploy --
+      roughly half of water districts hit a 20-min timeout under 15-way
+      concurrency, and 2-3 names containing commas failed every time via
+      a Climate Engine sub_choices parsing bug. Both root-caused from the
+      actual raw-status artifact (not guessed) and fixed: lower
+      concurrency + longer per-job timeout for water districts, and the
+      comma-bug routed through the existing geometry-fallback path. Not
+      yet validated against a full real run -- see "Water district
+      timeouts under concurrent load" and "Comma-in-name submit bug"
+      decisions below. Needs one more forced run to confirm.
 - [x] Every report's "Now" data was showing gridMET Drought's PREVIOUS
       pentad, not the current one, for a completely different reason than
       the missing-districts issue below: requesting `end_date` exactly
@@ -169,6 +179,80 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### WD_ASSET_ID had the full URL, not the bare asset path
+**Decision:** No code change -- the `WD_ASSET_ID` GitHub Actions secret
+itself was corrected by the user from
+`https://code.earthengine.google.com/?asset=projects/ee-meetpalkukal/assets/water_districts`
+to just `projects/ee-meetpalkukal/assets/water_districts`.
+**Why:** All 101 water districts failed on the first real attempt with
+`submit_error`. Root-caused by directly testing the exact same request
+live: a call using the bare asset path succeeded immediately, while the
+error message from the real failed run
+(`Collection.loadTable: Collection asset 'https://code.earthengine.google.com/?asset=projects/...' not found`)
+showed the full browser URL had been used as the asset ID literally --
+Earth Engine was looking for an asset named `https://code.earthengine...`,
+which of course doesn't exist. An initial hypothesis (the EE table upload
+was still processing/ingesting) was considered but disproven once the
+literal URL string turned up inside Climate Engine's own error message.
+**How to apply:** When asking for an asset ID from a link like
+`code.earthengine.google.com/?asset=<path>`, only the `<path>` portion
+after `?asset=` is the actual ID -- worth saying explicitly next time
+rather than assuming it's obvious.
+
+### Water district timeouts under concurrent load
+**Decision:** `JOB_TIMEOUT_S` in `fetch_reports.py` raised from 20 to 30
+minutes. `run_pipeline.py` gained a `LAYER_MAX_IN_FLIGHT` override,
+dropping `water_districts` specifically from the default 15 concurrent
+jobs to 5, passed through to both `run_layer()` and
+`run_geometry_fallback()` for every pass in `process_chunk()`.
+**Why:** The first real run after the `WD_ASSET_ID` fix still failed to
+deploy -- it hit the (then) 300-minute GitHub Actions job timeout and got
+cancelled, so nothing committed despite running for 5 hours. Diagnosed
+from the actual `raw-status-<run-id>` artifact the user downloaded and
+shared (not guessed): of the sampled water district status files, roughly
+**half** showed `{"status": "timeout"}` with no further detail -- these
+are our own `process_jobs()` marking a job dead after `JOB_TIMEOUT_S`
+with no Climate Engine response at all, not an error Climate Engine
+returned. A single isolated water district request (e.g. "Boise River",
+tested live and directly) reliably finishes in ~2-6 minutes with zero
+contention -- well under even the old 20-minute limit -- which points at
+concurrency, not raw computation time: water district polygons are
+dramatically larger than groundwater/irrigation ones, and 15 of them
+computing simultaneously against Earth Engine evidently degrades
+individual completion time enough to blow through a limit that's
+comfortable for any one of them alone. Since every retry pass is a full
+resubmit-from-scratch (not a resume), each timeout wave was expensive --
+this is almost certainly the dominant cause of the 5-hour overrun, more
+so than the comma-in-name bug (below), which only affects 2-3 names.
+**How to apply:** Not yet validated against a full real run -- if timeouts
+are still common after this change, lower `LAYER_MAX_IN_FLIGHT["water_districts"]`
+further (e.g. to 3) before assuming a new root cause. If groundwater or
+irrigation organizations ever grow to include much larger polygons too,
+they may need the same per-layer override.
+
+### Comma-in-name submit bug: Climate Engine splits sub_choices on commas
+**Decision:** `fetch_reports._fallback_kind()` now also matches any
+`submit_error` message containing `"Invalid subchoice"`, routing those
+names through the existing geometry-fallback path (`/reports/drought/coordinates`,
+selecting by geometry instead of by name) the same way the original
+`'coordinates'` bug is handled.
+**Why:** Found in the same raw-status artifact: water district names
+containing a comma (e.g. `"74W Texas, Hawley,Timber, Junction, Bull, Jake
+and Canyon Creeks"`, `"13M Cottonwood, Battle and Stockton Creeks"`)
+failed every single time with `submit_error` and a message like
+`"Invalid subchoice: 74W Texas, Hawley,Timber,... Please choose one on
+['74W Texas', 'Hawley', 'Timber', ...]"` -- Climate Engine's
+`feature_collection` endpoint splits the `sub_choices` value on commas and
+treats it as a list of candidate names, rather than one literal name that
+happens to contain commas. This is permanent, not transient -- no amount
+of retrying the same way would ever fix it, unlike the timeout issue
+above.
+**How to apply:** If a future boundary layer has any other punctuation
+that Climate Engine's name-matching might parse specially, check
+`_fallback_kind()` covers it, or add a new branch following the same
+pattern -- don't assume a "same name every time" failure is a data
+problem before checking whether it's this exact bug.
 
 ### Add water districts, cut irrigation orgs to SWC-only
 **Decision:** Added a new `water_districts` layer (Idaho Code 42-604 water

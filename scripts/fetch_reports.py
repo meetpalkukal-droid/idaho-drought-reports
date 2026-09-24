@@ -104,15 +104,24 @@ LAYERS = {
     "water_districts": "WD_ASSET_ID",
 }
 
-# Individual jobs took ~2-5 min in testing.
+# Individual jobs took ~2-5 min in testing for groundwater/irrigation
+# polygons. Water districts are much larger (a real isolated test of
+# "Boise River" took ~5.5 min alone) and, under concurrent load, a live
+# run showed roughly half of them hitting a 20-minute timeout -- bumped to
+# 30 min to give genuinely slow-but-progressing jobs room to finish
+# instead of getting killed and needing a full resubmit. See DECISIONS.md
+# "Water district timeouts under concurrent load".
 POLL_INTERVAL_S = 15
-JOB_TIMEOUT_S = 20 * 60
+JOB_TIMEOUT_S = 30 * 60
 IN_PROGRESS_STATUSES = {"running", "pending", "queued", "in_progress", "started"}
 
 # How many jobs may be submitted-but-not-yet-terminal at once. 183
 # concurrent jobs reliably exceeded Earth Engine's concurrent interactive
 # request quota (see module docstring); this is a conservative starting
 # point, not a value confirmed safe at its own ceiling -- see DECISIONS.md.
+# Water districts use a lower override (see run_pipeline.py's
+# LAYER_MAX_IN_FLIGHT) since their much larger polygons hit real
+# concurrency-driven timeouts at this default -- see DECISIONS.md.
 DEFAULT_MAX_IN_FLIGHT = 15
 
 # Confirmed via live testing (see DECISIONS.md) against the smallest (0.03
@@ -439,6 +448,17 @@ def _fallback_kind(message: str | None) -> str | None:
         return "unbuffered"
     if message and message.startswith("No valid"):
         return "buffered"
+    # Confirmed live (water districts rollout, see DECISIONS.md "Comma-in-
+    # name submit bug"): feature_collection's sub_choices filter splits on
+    # commas, so any name containing one (e.g. "13M Cottonwood, Battle and
+    # Stockton Creeks") gets misread as a list of choices and always fails
+    # with a submit_error whose body contains "Invalid subchoice" -- not
+    # transient, and not fixable by retrying the same way. The geometry
+    # itself is fine, so route it through /reports/drought/coordinates
+    # (which selects by geometry, not by name) same as the original
+    # 'coordinates' bug.
+    if message and "Invalid subchoice" in message:
+        return "unbuffered"
     return None
 
 

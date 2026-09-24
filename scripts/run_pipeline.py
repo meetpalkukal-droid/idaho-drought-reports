@@ -39,6 +39,7 @@ from fetch_reports import (
     list_failed_sites,
     LAYERS,
     PROCESSED_DIR,
+    DEFAULT_MAX_IN_FLIGHT,
 )
 from build_site import build
 
@@ -48,6 +49,18 @@ FAILURES_PATH = ROOT / "data" / "reports" / "last_run_failures.json"
 RETRY_BACKOFF_S = 45
 CHUNK_COUNT = 3
 CHUNK_INTERVAL_MINUTES = 60
+# Water district polygons are dramatically larger than groundwater/
+# irrigation ones -- a live run at the default concurrency (15) showed
+# roughly half of them timing out (20 min each) under contention, even
+# though an isolated single request finishes in ~2-6 min. Lower
+# concurrency trades raw parallelism for reliability: fewer jobs compete
+# for Earth Engine's compute capacity at once, so more finish within the
+# timeout on their first attempt instead of needing a full, expensive
+# resubmit. See DECISIONS.md "Water district timeouts under concurrent
+# load".
+LAYER_MAX_IN_FLIGHT = {
+    "water_districts": 5,
+}
 
 
 def load_state() -> dict:
@@ -91,7 +104,9 @@ def build_chunks(limit: int | None) -> list[dict[str, list[str]]]:
 
 def process_chunk(chunk: dict[str, list[str]], *, run_date: str, api_end_date: str, limit: int | None) -> None:
     for layer, names in chunk.items():
-        run_layer(layer, limit=limit, end_date=run_date, api_end_date=api_end_date, names_override=names)
+        max_in_flight = LAYER_MAX_IN_FLIGHT.get(layer, DEFAULT_MAX_IN_FLIGHT)
+        run_layer(layer, limit=limit, end_date=run_date, api_end_date=api_end_date,
+                  names_override=names, max_in_flight=max_in_flight)
         # Two automatic retry passes, with a short backoff between them:
         # transient failures (concurrency-limit errors, network blips) are
         # expected at some rate every run -- see DECISIONS.md "Second
@@ -102,19 +117,20 @@ def process_chunk(chunk: dict[str, list[str]], *, run_date: str, api_end_date: s
         # trying again.
         time.sleep(RETRY_BACKOFF_S)
         run_layer(layer, limit=limit, end_date=run_date, api_end_date=api_end_date,
-                  retry_failed=True, names_override=names)
-        # Anything still failing with one of the two confirmed-fixable
-        # error messages (a Climate Engine server-side bug on complex
-        # geometries, or gridMET's 4km grid missing tiny polygons) gets
-        # resubmitted via the coordinates endpoint instead -- see
-        # DECISIONS.md and the fetch_reports.py module docstring.
-        run_geometry_fallback(layer, end_date=run_date, api_end_date=api_end_date)
+                  retry_failed=True, names_override=names, max_in_flight=max_in_flight)
+        # Anything still failing with one of the confirmed-fixable error
+        # messages (a Climate Engine server-side bug on complex
+        # geometries, gridMET's 4km grid missing tiny polygons, or the
+        # comma-in-name sub_choices parsing bug) gets resubmitted via the
+        # coordinates endpoint instead -- see DECISIONS.md and the
+        # fetch_reports.py module docstring.
+        run_geometry_fallback(layer, end_date=run_date, api_end_date=api_end_date, max_in_flight=max_in_flight)
         # A last retry pass catches anything the fallback didn't touch
         # (a different, unrecognized error) that might still just be
         # transient.
         time.sleep(RETRY_BACKOFF_S)
         run_layer(layer, limit=limit, end_date=run_date, api_end_date=api_end_date,
-                  retry_failed=True, names_override=names)
+                  retry_failed=True, names_override=names, max_in_flight=max_in_flight)
 
 
 def main() -> None:

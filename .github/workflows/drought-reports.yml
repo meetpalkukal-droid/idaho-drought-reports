@@ -31,14 +31,19 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    # Explicit, generous timeout: run_pipeline.py now deliberately spreads
-    # ~121 polygons across 3 chunks, 60 minutes apart (see run_pipeline.py
-    # and DECISIONS.md "Add water districts, cut irrigation orgs to
-    # SWC-only"), so a full run takes ~2-3 hours end to end, not ~20-30
-    # minutes like the old single-pass run. The default GitHub-hosted
-    # runner timeout (360 min) would likely cover this anyway, but this is
-    # set explicitly so it's not relying on an undocumented default.
-    timeout-minutes: 300
+    # Explicit, generous timeout. run_pipeline.py spreads ~121 polygons
+    # across 3 chunks, 60 minutes apart -- but a first live run showed
+    # water districts (much larger than groundwater/irrigation polygons)
+    # hitting the 20-min per-job timeout under concurrent load often
+    # enough to blow past the previous 300-min (5hr) cap and get cancelled
+    # mid-run. Lowered water districts' concurrency and raised the per-job
+    # timeout to fix the underlying cause (see DECISIONS.md "Water
+    # district timeouts under concurrent load"), but this cap is set well
+    # above the ~3 hour expected duration as a safety margin while that
+    # fix is validated against a real run, not a tight bound -- exceeding
+    # it kills the job mid-run with nothing committed, which is worse than
+    # the run simply taking longer than expected.
+    timeout-minutes: 480
     outputs:
       site_changed: ${{ steps.diff.outputs.changed }}
     steps:
