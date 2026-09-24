@@ -14,17 +14,28 @@ current setup/usage instructions.
       corrected the secret to just `projects/ee-meetpalkukal/assets/water_districts`.
       See "WD_ASSET_ID had the full URL, not the bare asset path" decision
       below.
-- [ ] Water district timeouts under concurrent load + comma-in-name submit
+- [x] Water district timeouts under concurrent load + comma-in-name submit
       bug: a real run after the asset-ID fix still failed to deploy --
       roughly half of water districts hit a 20-min timeout under 15-way
       concurrency, and 2-3 names containing commas failed every time via
       a Climate Engine sub_choices parsing bug. Both root-caused from the
-      actual raw-status artifact (not guessed) and fixed: lower
-      concurrency + longer per-job timeout for water districts, and the
-      comma-bug routed through the existing geometry-fallback path. Not
-      yet validated against a full real run -- see "Water district
-      timeouts under concurrent load" and "Comma-in-name submit bug"
-      decisions below. Needs one more forced run to confirm.
+      actual raw-status artifact (not guessed). The comma bug is routed
+      through the existing geometry-fallback path. The concurrency fix
+      was validated directly (not just reasoned about): a live test of
+      the exact 20 water districts that failed in production, run again
+      at 3 concurrent instead of 15, got 20/20 successes with zero
+      timeouts. See "Water district timeouts under concurrent load" and
+      "Comma-in-name submit bug" decisions below.
+- [x] Chunked-submission scheme (3 chunks, 60 min apart) removed --
+      GitHub silently caps job runtime at 6 hours regardless of
+      `timeout-minutes`, so a run that took >6h (because water district
+      timeouts under 15-concurrent were the real bottleneck, not request
+      quota) got killed mid-run with nothing committed. Once concurrency
+      was fixed at the source, the ~121 requests naturally pace slowly
+      enough across the resulting ~3 hour run to stay under the 200/hour
+      quota without any artificial chunking -- removed ~2 hours of pure
+      inter-chunk sleep that was no longer buying anything. See "Simplify:
+      drop chunking now that concurrency is fixed" decision below.
 - [x] Every report's "Now" data was showing gridMET Drought's PREVIOUS
       pentad, not the current one, for a completely different reason than
       the missing-districts issue below: requesting `end_date` exactly
@@ -201,11 +212,11 @@ after `?asset=` is the actual ID -- worth saying explicitly next time
 rather than assuming it's obvious.
 
 ### Water district timeouts under concurrent load
-**Decision:** `JOB_TIMEOUT_S` in `fetch_reports.py` raised from 20 to 30
-minutes. `run_pipeline.py` gained a `LAYER_MAX_IN_FLIGHT` override,
-dropping `water_districts` specifically from the default 15 concurrent
-jobs to 5, passed through to both `run_layer()` and
-`run_geometry_fallback()` for every pass in `process_chunk()`.
+**Decision:** `run_pipeline.py`'s `LAYER_MAX_IN_FLIGHT` caps
+`water_districts` at **3** concurrent jobs (default for other layers stays
+15), passed through to both `run_layer()` and `run_geometry_fallback()`.
+`JOB_TIMEOUT_S` in `fetch_reports.py` raised from 20 to 30 minutes as a
+secondary safety margin.
 **Why:** The first real run after the `WD_ASSET_ID` fix still failed to
 deploy -- it hit the (then) 300-minute GitHub Actions job timeout and got
 cancelled, so nothing committed despite running for 5 hours. Diagnosed
@@ -213,23 +224,64 @@ from the actual `raw-status-<run-id>` artifact the user downloaded and
 shared (not guessed): of the sampled water district status files, roughly
 **half** showed `{"status": "timeout"}` with no further detail -- these
 are our own `process_jobs()` marking a job dead after `JOB_TIMEOUT_S`
-with no Climate Engine response at all, not an error Climate Engine
-returned. A single isolated water district request (e.g. "Boise River",
-tested live and directly) reliably finishes in ~2-6 minutes with zero
-contention -- well under even the old 20-minute limit -- which points at
-concurrency, not raw computation time: water district polygons are
-dramatically larger than groundwater/irrigation ones, and 15 of them
-computing simultaneously against Earth Engine evidently degrades
-individual completion time enough to blow through a limit that's
-comfortable for any one of them alone. Since every retry pass is a full
-resubmit-from-scratch (not a resume), each timeout wave was expensive --
-this is almost certainly the dominant cause of the 5-hour overrun, more
-so than the comma-in-name bug (below), which only affects 2-3 names.
-**How to apply:** Not yet validated against a full real run -- if timeouts
-are still common after this change, lower `LAYER_MAX_IN_FLIGHT["water_districts"]`
-further (e.g. to 3) before assuming a new root cause. If groundwater or
-irrigation organizations ever grow to include much larger polygons too,
-they may need the same per-layer override.
+with no Climate Engine response at all. A single isolated water district
+request (e.g. "Boise River" or "01 Upper Snake River", the largest-
+sounding district, tested live and directly) reliably finishes in ~2-6
+minutes with zero contention, which points at concurrency, not raw
+computation time: water district polygons are dramatically larger than
+groundwater/irrigation ones, and many computing simultaneously against
+Earth Engine evidently degrades individual completion time badly.
+**First attempt (5 concurrent) was insufficient -- confirmed, not
+assumed:** dropping straight to 5 concurrent still produced a run that
+exceeded even the 480-minute timeout set at the time (which GitHub
+silently clamped to its own hard 360-minute/6-hour ceiling regardless --
+see "Simplify: drop chunking" below). Rather than guess again, tested 3
+concurrent directly against the real API using the exact 20 water
+districts that had failed in production: **20/20 succeeded, zero
+timeouts**, ~1.6 min/polygon average, ~32 min total. That's the number
+this ships with.
+**How to apply:** If timeouts return, don't jump back to guessing --
+re-run the same kind of direct, small-batch live test (`run_layer(...,
+names_override=[...], max_in_flight=N)` against a handful of real
+polygons) at a lower `N` before changing the shipped value, the same way
+this one was actually validated. If groundwater or irrigation
+organizations ever grow to include much larger polygons too, they may
+need the same per-layer override.
+
+### Simplify: drop chunking now that concurrency is fixed at the source
+**Decision:** Removed the 3-chunk/60-minute-apart submission scheme from
+`run_pipeline.py` entirely (`build_chunks()`, `process_chunk()`,
+`CHUNK_COUNT`, `CHUNK_INTERVAL_MINUTES` are gone). Replaced with a plain
+sequential loop over the 3 layers (`process_layer()`), no artificial
+sleeps between them. Also dropped the workflow's `timeout-minutes` back
+down from 480 to 240.
+**Why -- two things learned at once:** First, direct confirmation that
+GitHub Actions has a **hard 6-hour ceiling** on GitHub-hosted runner job
+duration that `timeout-minutes` cannot exceed, no matter what value is
+set -- a run with `timeout-minutes: 480` still failed with "exceeded the
+maximum execution time of 6h0m0s". So "raise the timeout" was never a
+real fix once a run's true bottleneck (water district concurrency, not
+request-rate quota) pushed it past 6 hours; the pipeline has to actually
+finish inside that ceiling. Second, once `LAYER_MAX_IN_FLIGHT["water_districts"]
+= 3` was validated (see the decision above), the reason chunking existed
+in the first place -- keeping request volume under Climate Engine's 200
+req/hour cap -- turned out to already be satisfied as a side effect: at
+~1.6 min/polygon and only 3 in flight at once, ~121 total requests spread
+across the resulting ~3 hour run average out to roughly 80/hour, nowhere
+close to 200. The chunking scheme's 2 inter-chunk sleeps (60 min each)
+were pure dead time bought against a quota problem that concurrency
+tuning had already solved, on top of adding real complexity (the
+`names_override` plumbing, chunk-local retry scoping) for no remaining
+benefit.
+**How to apply:** If a future layer addition makes per-hour request
+volume a real constraint again (e.g. a much bigger or much faster-to-
+compute layer that could plausibly submit >200 requests within a single
+hour), re-derive the actual number from real per-polygon timing first
+(the way water districts' concurrency was validated) rather than
+re-adding chunking preemptively. `run_layer()`/`run_geometry_fallback()`
+still support `names_override` if chunking is ever genuinely needed
+again -- it wasn't removed from `fetch_reports.py`, only from
+`run_pipeline.py`'s orchestration.
 
 ### Comma-in-name submit bug: Climate Engine splits sub_choices on commas
 **Decision:** `fetch_reports._fallback_kind()` now also matches any

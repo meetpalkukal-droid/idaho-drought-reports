@@ -31,19 +31,24 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    # Explicit, generous timeout. run_pipeline.py spreads ~121 polygons
-    # across 3 chunks, 60 minutes apart -- but a first live run showed
-    # water districts (much larger than groundwater/irrigation polygons)
-    # hitting the 20-min per-job timeout under concurrent load often
-    # enough to blow past the previous 300-min (5hr) cap and get cancelled
-    # mid-run. Lowered water districts' concurrency and raised the per-job
-    # timeout to fix the underlying cause (see DECISIONS.md "Water
-    # district timeouts under concurrent load"), but this cap is set well
-    # above the ~3 hour expected duration as a safety margin while that
-    # fix is validated against a real run, not a tight bound -- exceeding
-    # it kills the job mid-run with nothing committed, which is worse than
-    # the run simply taking longer than expected.
-    timeout-minutes: 480
+    # Explicit timeout, with margin. GitHub silently caps job runtime at
+    # 6 hours (360 min) regardless of what's set here -- a run that hit
+    # this exact wall got "exceeded the maximum execution time of 6h0m0s"
+    # even though timeout-minutes was 480. So 6 hours is a hard ceiling we
+    # must fit under, not a value we can raise our way past.
+    #
+    # Root cause of long/failing runs (see DECISIONS.md "Water district
+    # timeouts under concurrent load"): water district polygons are much
+    # larger than groundwater/irrigation ones, and running many
+    # concurrently badly degrades Earth Engine's per-job completion time.
+    # Confirmed live: 15 concurrent -> ~50% of water districts timed out;
+    # 3 concurrent -> 20/20 succeeded, 0 timeouts, ~1.6 min/polygon
+    # average. run_pipeline.py now caps water_districts at 3 concurrent
+    # (LAYER_MAX_IN_FLIGHT), which extrapolates to ~2.5-3 hours for all
+    # 101 of them plus ~15 min for the other two layers -- comfortably
+    # under the 6-hour ceiling. 240 min here is a safety margin over that
+    # ~3 hour estimate, not the expected duration.
+    timeout-minutes: 240
     outputs:
       site_changed: ${{ steps.diff.outputs.changed }}
     steps:
