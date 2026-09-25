@@ -196,12 +196,32 @@ HOME_TEMPLATE = """<!doctype html>
 <main><div class="wide">
 <div class="hero">
 <h1>{site_name}</h1>
-<p class="lede">Drought conditions for {gw_count} Idaho groundwater districts, {irr_count} Surface Water Coalition irrigation organizations, and {wd_count} Idaho water districts, built on Climate Engine's gridMET Drought data and updated every 5 days.</p>
+<p class="lede">Drought conditions for {gw_count} Idaho groundwater districts, {irr_count} major surface water entities, and {wd_count} Idaho water districts, built on Climate Engine's gridMET Drought data and updated every 5 days.</p>
 <p class="meta">Report period ending {run_date}.</p>
 </div>
 
-<h2>Find your district or organization</h2>
-<input class="search-box" id="home-search" type="search" placeholder="Search by name&hellip;" aria-label="Search all districts and organizations">
+<h2>Choose a boundary type</h2>
+<p class="meta section-intro">Groundwater districts, irrigation organizations, and water districts overlap heavily on a single map -- pick one type first, then browse its map or list without the others in the way.</p>
+<div class="type-selector" role="tablist" aria-label="Choose a boundary type">
+<button class="type-card" type="button" role="tab" aria-pressed="false" data-type="groundwater_districts">
+  <div class="type-card-top"><span class="type-card-swatch"></span><span class="type-card-name">Groundwater Districts</span></div>
+  <div class="type-card-count">{gw_count} districts</div>
+  <div class="type-card-hint">View map &amp; list</div>
+</button>
+<button class="type-card" type="button" role="tab" aria-pressed="false" data-type="irrigation_organizations">
+  <div class="type-card-top"><span class="type-card-swatch"></span><span class="type-card-name">Irrigation Organizations</span></div>
+  <div class="type-card-count">{irr_count} organizations</div>
+  <div class="type-card-hint">Major Surface Water Entities &mdash; view map &amp; list</div>
+</button>
+<button class="type-card" type="button" role="tab" aria-pressed="false" data-type="water_districts">
+  <div class="type-card-top"><span class="type-card-swatch"></span><span class="type-card-name">Water Districts</span></div>
+  <div class="type-card-count">{wd_count} districts</div>
+  <div class="type-card-hint">View map &amp; list</div>
+</button>
+</div>
+
+<h2>Or search by name</h2>
+<input class="search-box" id="home-search" type="search" placeholder="Search all districts and organizations&hellip;" aria-label="Search all districts and organizations">
 <ul id="home-search-results" hidden></ul>
 
 <div class="selector-tabs" role="tablist">
@@ -209,15 +229,12 @@ HOME_TEMPLATE = """<!doctype html>
 <button class="selector-tab" role="tab" aria-selected="false" aria-controls="panel-list" data-tab="list">List</button>
 </div>
 <div class="selector-panel active" id="panel-map" role="tabpanel">
-<div class="map-legend">
-<span><span class="swatch" style="background:#1d5fa8"></span>Groundwater districts</span>
-<span><span class="swatch" style="background:#1baf7a"></span>Irrigation organizations</span>
-<span><span class="swatch" style="background:#c9862a"></span>Water districts</span>
-</div>
-<div id="home-map"></div>
-<p class="meta" style="margin-top:10px;">Click a boundary to open its report.</p>
+<div class="map-placeholder" id="home-map-placeholder">Choose a boundary type above to see its map.</div>
+<div id="home-map" hidden></div>
+<p class="meta" id="home-map-hint" hidden style="margin-top:10px;">Click a boundary to open its report.</p>
 </div>
 <div class="selector-panel" id="panel-list">
+<p class="meta" id="home-list-placeholder">Choose a boundary type above to see its list.</p>
 <div id="home-list"></div>
 </div>
 

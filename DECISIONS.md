@@ -7,6 +7,13 @@ current setup/usage instructions.
 
 ## Open items
 
+- [x] Homepage redesign: type-first selector (pick a boundary type before
+      any map is shown, instead of one combined map with all three layers
+      overlapping), full-width layout, and a display-font/spacing pass for
+      a more designed look. See "Homepage redesign: type-first selector,
+      full width, display font" decision below. Found and fixed a real
+      `[hidden]` specificity bug during QA (the placeholder and the real
+      map were both rendering at once).
 - [x] Water districts rollout finished: full run succeeded in 2h43m
       (within the ~3 hour estimate). Added a second, fast workflow
       (`rebuild-site.yml`) so code/design-only changes don't need to wait
@@ -195,6 +202,52 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Homepage redesign: type-first selector, full width, display font
+**Decision:** Three changes, per explicit user request:
+  - **Type-first selector**: the homepage now shows three `.type-card`
+    buttons (Groundwater Districts / Irrigation Organizations / Water
+    Districts) above the search box; the map and list stay empty (a
+    `.map-placeholder` prompt) until one is clicked, then show ONLY that
+    type's boundaries. `home.js`'s Leaflet map is lazily created on the
+    first pick and re-filtered in place (clear + re-add a `L.geoJSON`
+    layer, refit bounds) on subsequent picks, rather than always showing
+    all three layers' boundaries at once.
+  - **Full-width layout**: `.wide`'s `max-width` raised from 1400px to
+    2200px with larger side padding (56px, stepping down responsively),
+    and `main`/`.site-header` padding increased to match. Prose-width
+    elements (`.prose`, `.section-intro`, the glossary, etc.) were
+    untouched -- they were already deliberately capped at 760px for
+    readability, a separate concern from how wide the page's layout
+    containers are.
+  - **Display font + spacing pass**: added Fraunces (a serif with real
+    character, not the Inter/Space-Grotesk pairing that's become an
+    AI-generated-design cliché) for the site name in the header and page
+    `<h1>`s, paired with the existing Inter for everything else. Card
+    radius bumped from 10px to 16-18px site-wide, sticky header, hover
+    lift on interactive cards, more generous hero spacing.
+**Why -- the type-first selector specifically:** With all three layers
+combined (13 + 7 + 101 = 121 boundaries), the map was dense enough that
+overlapping or adjacent polygons from different layers were genuinely
+hard to click individually -- user-reported. Filtering to one type at a
+time removes the overlap entirely rather than trying to fix it with
+z-index/opacity tricks. Search stays global across all types (typing a
+name has no overlap problem, so there's no reason to restrict it).
+**Bug found and fixed during visual QA (not caught by just reading the
+code):** the map placeholder and the real Leaflet map were both visible
+at once after selecting a type. Root cause: `.map-placeholder` sets
+`display: flex` directly, and CSS's `[hidden] { display: none }` (from
+the browser's UA stylesheet) has the *same specificity* as a single class
+selector -- when a later author rule ties on specificity, the author rule
+wins over the UA default, so `display: flex` silently beat `[hidden]`.
+Fixed with a global `[hidden] { display: none !important; }` rule near
+the top of the stylesheet, which is a good defensive default generally
+(any future element toggled via the `hidden` attribute is now safe from
+this same class of bug), not just a one-off patch.
+**How to apply:** If a new toggleable panel is ever added with its own
+explicit `display` rule, no extra care is needed now that the global
+`[hidden]` override exists -- but worth remembering *why* it's there if
+someone is tempted to remove it as looking redundant.
 
 ### Rebuild-only workflow: redeploy without re-fetching data
 **Decision:** Added `.github/workflows/rebuild-site.yml`, a second,
