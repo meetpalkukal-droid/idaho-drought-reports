@@ -1,87 +1,12 @@
 /* Idaho Water User Drought Reports -- design system.
-   Tokens (see dataviz skill palette.md) -- light default, dark under
-   prefers-color-scheme. Drought classes (--dc-c0..c10) are a validated
-   5-step-per-arm diverging ramp (red = dry, blue = wet, gray = near-normal)
-   -- do not touch without re-checking DECISIONS.md "Fixed: near-normal
-   drought class was nearly invisible against the page background". */
-
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,550;9..144,650&family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap');
+   Tokens (see dataviz skill palette.md) -- dark default, light under
+   prefers-color-scheme: light. Drought classes (--dc-c0..c10) are a
+   validated 5-step-per-arm diverging ramp (red = dry, blue = wet, gray =
+   near-normal) -- do not touch without re-checking DECISIONS.md "Fixed:
+   near-normal drought class was nearly invisible against the page
+   background". */
 
 :root {
-  color-scheme: light;
-  --page: #f4f5f3;
-  --surface-1: #ffffff;
-  --surface-2: #ffffff;
-  --header-bg: #0f2e4c;
-  --header-fg: #ffffff;
-  --header-fg-muted: #b7cbe0;
-  --text-primary: #14181c;
-  --text-secondary: #4c565f;
-  --text-muted: #7c868e;
-  --gridline: #e4e7e6;
-  --border: rgba(20, 24, 28, 0.11);
-  --accent: #1d5fa8;
-  --accent-ink: #ffffff;
-  --card-shadow: 0 1px 2px rgba(20, 24, 28, 0.04), 0 4px 16px rgba(20, 24, 28, 0.06);
-
-  --dc-c0: #a50f15;  /* Exceptional Drought D4 */
-  --dc-c1: #de2d26;  /* Extreme Drought D3 */
-  --dc-c2: #fb6a4a;  /* Severe Drought D2 */
-  --dc-c3: #fc9272;  /* Moderate Drought D1 */
-  --dc-c4: #fcbba1;  /* Abnormally Dry D0 */
-  --dc-c5: #cdccc4;  /* Near Normal -- deliberately more visible than the
-                         skill's literal diverging-midpoint gray (#f0efec):
-                         that value was nearly invisible against this page's
-                         near-white surface/background, making a real
-                         "near normal" class-bar segment or chart band read
-                         as empty/no-data instead of a filled neutral zone. */
-  --dc-c6: #9ec5f4;  /* Abnormally Wet */
-  --dc-c7: #6da7ec;  /* Moderately Wet */
-  --dc-c8: #3987e5;  /* Severely Wet */
-  --dc-c9: #256abf;  /* Extremely Wet */
-  --dc-c10: #104281; /* Exceptionally Wet */
-}
-
-/* Three-state theme: light (default), dark, and "system" (follows the
-   OS). A saved explicit choice (data-theme, set by theme.js) always wins
-   over the OS preference -- :not([data-theme="light"]) lets an explicit
-   light choice override a dark OS, and the [data-theme="dark"] block
-   below lets an explicit dark choice apply even on a light OS. Both dark
-   blocks intentionally duplicate the same token values (CSS custom
-   properties can't be shared across two separate selector blocks without
-   a preprocessor) -- if one is edited, edit the other to match. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --page: #0c0f12;
-    --surface-1: #171b1f;
-    --surface-2: #1c2126;
-    --header-bg: #0a1e33;
-    --header-fg: #ffffff;
-    --header-fg-muted: #9db6ce;
-    --text-primary: #f2f3f4;
-    --text-secondary: #b7bfc6;
-    --text-muted: #838d95;
-    --gridline: #2a2f34;
-    --border: rgba(255, 255, 255, 0.11);
-    --accent: #5b9bdb;
-    --accent-ink: #0a1e33;
-    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.35);
-
-    --dc-c0: #c93a3a;
-    --dc-c1: #e8544f;
-    --dc-c2: #fb6a4a;
-    --dc-c3: #fc9272;
-    --dc-c4: #fcbba1;
-    --dc-c5: #4a4946;  /* same visibility fix as light mode, against #171b1f/#0c0f12 */
-    --dc-c6: #9ec5f4;
-    --dc-c7: #6da7ec;
-    --dc-c8: #3987e5;
-    --dc-c9: #2a78d6;
-    --dc-c10: #3060a8;
-  }
-}
-:root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0c0f12;
   --surface-1: #171b1f;
@@ -103,12 +28,86 @@
   --dc-c2: #fb6a4a;
   --dc-c3: #fc9272;
   --dc-c4: #fcbba1;
-  --dc-c5: #4a4946;
+  --dc-c5: #4a4946;  /* Near Normal -- deliberately more visible than the
+                         skill's literal diverging-midpoint gray: that
+                         value was nearly invisible against this page's
+                         dark surface/background, making a real "near
+                         normal" class-bar segment or chart band read as
+                         empty/no-data instead of a filled neutral zone. */
   --dc-c6: #9ec5f4;
   --dc-c7: #6da7ec;
   --dc-c8: #3987e5;
   --dc-c9: #2a78d6;
   --dc-c10: #3060a8;
+}
+
+/* Three-state theme: dark (default), light, and "system" (follows the
+   OS). A saved explicit choice (data-theme, set by theme.js) always wins
+   over the OS preference -- :not([data-theme="dark"]) lets an explicit
+   dark choice override a light OS, and the [data-theme="light"] block
+   below lets an explicit light choice apply even on a dark OS. Both light
+   blocks intentionally duplicate the same token values (CSS custom
+   properties can't be shared across two separate selector blocks without
+   a preprocessor) -- if one is edited, edit the other to match. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --page: #f4f5f3;
+    --surface-1: #ffffff;
+    --surface-2: #ffffff;
+    --header-bg: #0f2e4c;
+    --header-fg: #ffffff;
+    --header-fg-muted: #b7cbe0;
+    --text-primary: #14181c;
+    --text-secondary: #4c565f;
+    --text-muted: #7c868e;
+    --gridline: #e4e7e6;
+    --border: rgba(20, 24, 28, 0.11);
+    --accent: #1d5fa8;
+    --accent-ink: #ffffff;
+    --card-shadow: 0 1px 2px rgba(20, 24, 28, 0.04), 0 4px 16px rgba(20, 24, 28, 0.06);
+
+    --dc-c0: #a50f15;
+    --dc-c1: #de2d26;
+    --dc-c2: #fb6a4a;
+    --dc-c3: #fc9272;
+    --dc-c4: #fcbba1;
+    --dc-c5: #cdccc4;  /* same visibility fix as dark mode, against #ffffff/#f4f5f3 */
+    --dc-c6: #9ec5f4;
+    --dc-c7: #6da7ec;
+    --dc-c8: #3987e5;
+    --dc-c9: #256abf;
+    --dc-c10: #104281;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f4f5f3;
+  --surface-1: #ffffff;
+  --surface-2: #ffffff;
+  --header-bg: #0f2e4c;
+  --header-fg: #ffffff;
+  --header-fg-muted: #b7cbe0;
+  --text-primary: #14181c;
+  --text-secondary: #4c565f;
+  --text-muted: #7c868e;
+  --gridline: #e4e7e6;
+  --border: rgba(20, 24, 28, 0.11);
+  --accent: #1d5fa8;
+  --accent-ink: #ffffff;
+  --card-shadow: 0 1px 2px rgba(20, 24, 28, 0.04), 0 4px 16px rgba(20, 24, 28, 0.06);
+
+  --dc-c0: #a50f15;
+  --dc-c1: #de2d26;
+  --dc-c2: #fb6a4a;
+  --dc-c3: #fc9272;
+  --dc-c4: #fcbba1;
+  --dc-c5: #cdccc4;
+  --dc-c6: #9ec5f4;
+  --dc-c7: #6da7ec;
+  --dc-c8: #3987e5;
+  --dc-c9: #256abf;
+  --dc-c10: #104281;
 }
 
 * { box-sizing: border-box; }
@@ -131,7 +130,7 @@ html {
 body {
   background: var(--page);
   color: var(--text-primary);
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   line-height: 1.65;
   margin: 0;
   -webkit-font-smoothing: antialiased;
@@ -169,7 +168,7 @@ p { margin: 0.8em 0; }
 .site-header .wide { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .site-header a { color: var(--header-fg); text-decoration: none; }
 .site-header a:hover { text-decoration: underline; }
-.site-header .brand { font-family: "Fraunces", Georgia, serif; font-size: 1.4rem; font-weight: 550; letter-spacing: -0.01em; }
+.site-header .brand { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em; }
 .site-header .tagline { color: var(--header-fg-muted); font-size: 0.92rem; margin-top: 2px; }
 .header-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 
@@ -566,9 +565,9 @@ ul { padding-left: 1.3em; }
   position: relative;
 }
 /* A soft radial wash behind the hero text -- subtle enough to not compete
-   with the Fraunces headline, just enough to keep the top of the page
-   from feeling flat. Sits behind everything (z-index -1) and never
-   affects layout (absolute, no size). */
+   with the headline, just enough to keep the top of the page from
+   feeling flat. Sits behind everything (z-index -1) and never affects
+   layout (absolute, no size). */
 .hero::before {
   content: "";
   position: absolute;
@@ -582,9 +581,9 @@ ul { padding-left: 1.3em; }
   z-index: -1;
 }
 .hero h1 {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: clamp(2.4rem, 4.2vw, 3.75rem);
-  font-weight: 550;
+  font-weight: 700;
   letter-spacing: -0.015em;
   max-width: 16em;
 }

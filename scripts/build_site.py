@@ -109,10 +109,17 @@ HEADER_TEMPLATE = """<header class="site-header">
 # choice applies immediately -- no flash of the wrong theme on load. Kept
 # tiny and dependency-free on purpose (theme.js, loaded later with
 # `defer`, owns the actual toggle button and all its behavior).
+# Dark is the hard default: a saved 'dark'/'light' choice applies as-is,
+# a saved 'system' choice leaves data-theme unset so the CSS media query
+# decides, and -- the new-visitor case -- no saved choice at all (or a
+# localStorage read failure) forces 'dark' explicitly rather than falling
+# through to the OS preference, so a visitor whose OS happens to prefer
+# light still sees dark until they choose otherwise.
 THEME_INIT_SCRIPT = (
     "<script>(function(){try{var t=localStorage.getItem('theme');"
     "if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}"
-    "}catch(e){}})();</script>"
+    "else if(t!=='system'){document.documentElement.setAttribute('data-theme','dark');}"
+    "}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>"
 )
 
 PAGE_TEMPLATE = """<!doctype html>
