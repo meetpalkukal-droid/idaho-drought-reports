@@ -7,6 +7,11 @@ current setup/usage instructions.
 
 ## Open items
 
+- [x] Water districts rollout finished: full run succeeded in 2h43m
+      (within the ~3 hour estimate). Added a second, fast workflow
+      (`rebuild-site.yml`) so code/design-only changes don't need to wait
+      through a full data fetch to go live -- see "Rebuild-only workflow"
+      decision below.
 - [x] `WD_ASSET_ID` was set to the full Earth Engine Code Editor URL
       (`https://code.earthengine.google.com/?asset=projects/...`) instead
       of the bare asset path -- every water district submission failed
@@ -190,6 +195,39 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Rebuild-only workflow: redeploy without re-fetching data
+**Decision:** Added `.github/workflows/rebuild-site.yml`, a second,
+manual-only (`workflow_dispatch`) workflow that rebuilds and redeploys
+the site WITHOUT calling Climate Engine at all. It restores whatever
+`data/reports/extracted/` the last successful "Update drought reports"
+run cached (`actions/cache`, keyed `extracted-data-<run-id>`, restored via
+a `restore-keys` prefix match so it always grabs the most recent one),
+reads the matching `run_date` out of the already-committed
+`state.json`, and just runs `build_site.py` against that -- a couple
+minutes, not ~3 hours. The main workflow gained one new step (`actions/cache/save`)
+that populates this cache every time it actually fetches new data.
+**Why:** User asked directly whether a code/design-only push (CSS,
+templates, copy -- the kind of change made constantly throughout this
+project) has to wait through a full data-fetch cycle to go live. It
+didn't need to: `data/reports/extracted/` is intentionally never
+committed to git (it's ~550MB+ and would balloon the repo), but nothing
+stops caching it between Actions runs the way build tooling normally
+would -- it just hadn't been wired up, since every prior change happened
+to land in the same push as a data-relevant fix.
+**How it fails safely:** If no cache exists yet (first-ever run, or the
+cache aged out after 7 days of being unused per GitHub's own eviction
+policy), the workflow fails loudly with a clear message telling the user
+to run "Update drought reports" first, rather than silently deploying an
+empty or stale site.
+**How to apply:** Trigger this workflow (Actions tab -> "Rebuild and
+redeploy site (no data fetch)" -> "Run workflow") for any change that
+only touches `scripts/build_site.py`, `scripts/report_content.py`,
+`site/assets/`, or similar -- not `fetch_reports.py`/`run_pipeline.py`
+changes, since those need a real fetch to actually exercise. If the two
+workflows are ever triggered at the same moment, `concurrency: group:
+pages` (shared between both files) queues them rather than letting them
+race on the same Pages deployment.
 
 ### WD_ASSET_ID had the full URL, not the bare asset path
 **Decision:** No code change -- the `WD_ASSET_ID` GitHub Actions secret

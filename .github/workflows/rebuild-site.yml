@@ -1,0 +1,71 @@
+name: Rebuild and redeploy site (no data fetch)
+
+# For code/design-only changes (CSS, templates, copy) that don't need
+# fresh Climate Engine data -- rebuilds site/ from whatever report data
+# was cached by the last successful "Update drought reports" run and
+# redeploys it, in a couple minutes instead of the ~3 hour full fetch.
+# See DECISIONS.md "Rebuild-only workflow: redeploy without re-fetching
+# data". Needs at least one successful "Update drought reports" run to
+# have happened first, so there's cached data to rebuild from.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      # No exact-match key on purpose -- restore-keys prefix matching
+      # always returns the most recently created cache under that prefix,
+      # which is exactly "whatever the last real data fetch produced."
+      - name: Restore last fetched report data
+        uses: actions/cache/restore@v4
+        with:
+          path: data/reports/extracted/
+          key: extracted-data-none-will-exactly-match-this
+          restore-keys: |
+            extracted-data-
+
+      - name: Fail loudly if no cached data exists yet
+        run: |
+          if [ ! -d data/reports/extracted ] || [ -z "$(ls -A data/reports/extracted 2>/dev/null)" ]; then
+            echo "::error::No cached report data found (the cache may have expired after 7 days unused, or no 'Update drought reports' run has ever succeeded). Run that workflow first -- this one only rebuilds from what it already fetched."
+            exit 1
+          fi
+
+      - name: Rebuild site from cached data
+        run: |
+          RUN_DATE=$(python3 -c "import json; print(json.load(open('data/reports/state.json'))['last_data_date'])")
+          echo "Rebuilding for run_date=$RUN_DATE"
+          python scripts/build_site.py "$RUN_DATE"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: rebuild
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
