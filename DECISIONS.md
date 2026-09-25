@@ -7,6 +7,20 @@ current setup/usage instructions.
 
 ## Open items
 
+- [ ] The rebuild-only workflow's cache still doesn't exist -- it was
+      added after the last successful full fetch, so that fetch never
+      populated it. Needs one more forced "Update drought reports" run to
+      bootstrap the cache; that same run will also pick up every
+      code/design change made since (theme toggle, homepage redesign,
+      credit line), so no separate step is needed for those.
+- [x] Credit line updated to "Developed by Dr. Meetpal Kukal, University
+      of Idaho..." (funded by IWRRI, relies on ClimateEngine.org) on both
+      the homepage and report pages, replacing the old generic line.
+- [x] Dark mode toggle added (light/dark/system, persisted via
+      localStorage, no flash-of-wrong-theme on load) plus a small further
+      visual-polish pass (header accent gradient, hero background wash) --
+      see "Dark mode toggle: real 3-state theme, not just prefers-color-scheme"
+      decision below.
 - [x] Homepage redesign: type-first selector (pick a boundary type before
       any map is shown, instead of one combined map with all three layers
       overlapping), full-width layout, and a display-font/spacing pass for
@@ -202,6 +216,39 @@ current setup/usage instructions.
       actually self-heals correctly across a missed/failed run once live.
 
 ## Decisions
+
+### Dark mode toggle: real 3-state theme, not just prefers-color-scheme
+**Decision:** Added an actual toggle button (header, all pages) cycling
+System -> Light -> Dark -> System, persisted in `localStorage`. Previously
+dark mode only ever followed the OS's `prefers-color-scheme`, with no way
+for a user to override it. Implementation, following the same pattern the
+`artifact-design` skill documents for this exact problem:
+  - `:root` (bare, unguarded) still defines the light palette -- unchanged.
+  - `@media (prefers-color-scheme: dark)` now targets
+    `:root:not([data-theme="light"])` instead of bare `:root`, so an
+    explicit light choice can override a dark OS.
+  - A new `:root[data-theme="dark"]` block (same token values, duplicated
+    since CSS custom properties can't be shared across two separate
+    selector blocks without a preprocessor) lets an explicit dark choice
+    apply even on a light OS.
+  - `THEME_INIT_SCRIPT` (`build_site.py`) is a tiny inline `<script>`
+    placed first in every page's `<head>`, before the stylesheet --
+    applies any saved `data-theme` synchronously so there's no
+    flash-of-wrong-theme on load. `site/assets/theme.js` (loaded with
+    `defer`) owns the actual button and its click-to-cycle behavior.
+  - `THEME_INIT_SCRIPT`'s JS contains literal `{`/`}` characters, which
+    would collide with Python's `.format()` if inserted directly into a
+    template string that's later `.format()`-ed -- inserted via a plain
+    `__THEME_INIT__` text marker instead, replaced with `.replace()`
+    *after* `.format()` runs, avoiding the brace-escaping problem
+    entirely rather than doubling every brace in the script.
+**Why:** User asked directly for a dark mode toggle -- OS-only dark mode
+doesn't help anyone whose OS is light but who wants the site dark (or vice
+versa) at a given moment.
+**How to apply:** Any new color token must be added to `:root`, then
+copied into BOTH dark blocks identically -- a token defined in only one of
+the three places will read correctly in some theme states and silently
+wrong (or unset) in others.
 
 ### Homepage redesign: type-first selector, full width, display font
 **Decision:** Three changes, per explicit user request:

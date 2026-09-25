@@ -98,14 +98,28 @@ SITE_NAME = "Idaho Water User Drought Reports"
 HEADER_TEMPLATE = """<header class="site-header">
 <div class="wide">
 <div><a href="{home_href}"><span class="brand">{site_name}</span></a><div class="tagline">Drought conditions for Idaho water users, updated every 5 days</div></div>
+<div class="header-right">
 {nav}
+<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Change color theme"></button>
+</div>
 </div>
 </header>"""
+
+# Runs synchronously before the stylesheet paints, so a saved dark/light
+# choice applies immediately -- no flash of the wrong theme on load. Kept
+# tiny and dependency-free on purpose (theme.js, loaded later with
+# `defer`, owns the actual toggle button and all its behavior).
+THEME_INIT_SCRIPT = (
+    "<script>(function(){try{var t=localStorage.getItem('theme');"
+    "if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}"
+    "}catch(e){}})();</script>"
+)
 
 PAGE_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+__THEME_INIT__
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{name} — Idaho Drought Report</title>
 <link rel="stylesheet" href="../assets/style.css">
@@ -152,9 +166,10 @@ PAGE_TEMPLATE = """<!doctype html>
 
 {explainer}
 
-<p class="footer-note">Built by the University of Idaho as part of a statewide drought-response project. This is not an official regulatory product. Use it for planning and awareness, not as a substitute for your water right, delivery call, or mitigation plan records.</p>
+<p class="footer-note">Developed by Dr. Meetpal Kukal, University of Idaho as part of a statewide Drought Working Group project, funded by Idaho Water Resources Research Institute (IWRRI). The tools rely on ClimateEngine.org API reports. This is not an official regulatory product &mdash; use it for planning and awareness, not as a substitute for your water right, delivery call, or mitigation plan records.</p>
 </div></main>
 {bokeh_script}
+<script src="../assets/theme.js" defer></script>
 </body>
 </html>
 """
@@ -163,6 +178,7 @@ INDEX_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+__THEME_INIT__
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{layer_title} — Idaho Drought Reports</title>
 <link rel="stylesheet" href="../assets/style.css">
@@ -178,6 +194,7 @@ INDEX_TEMPLATE = """<!doctype html>
 </ul>
 </div></main>
 <script src="../assets/search.js"></script>
+<script src="../assets/theme.js" defer></script>
 </body>
 </html>
 """
@@ -186,6 +203,7 @@ HOME_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+__THEME_INIT__
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{site_name}</title>
 <link rel="stylesheet" href="assets/style.css">
@@ -238,10 +256,11 @@ HOME_TEMPLATE = """<!doctype html>
 <div id="home-list"></div>
 </div>
 
-<p class="footer-note">Built by the University of Idaho as part of a statewide drought-response project.</p>
+<p class="footer-note">Developed by Dr. Meetpal Kukal, University of Idaho as part of a statewide Drought Working Group project, funded by Idaho Water Resources Research Institute (IWRRI). The tools rely on ClimateEngine.org API reports.</p>
 </div></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="assets/home.js"></script>
+<script src="assets/theme.js" defer></script>
 </body>
 </html>
 """
@@ -650,7 +669,7 @@ def build(run_date: str) -> None:
                 summary_tables=summary_tables_html,
                 explainer=EXPLAINER_HTML,
                 bokeh_script=bokeh_script,
-            )
+            ).replace("__THEME_INIT__", THEME_INIT_SCRIPT)
             (layer_site_dir / f"{slug}.html").write_text(page_html, encoding="utf-8")
             index_items.append(f'<li><a href="{slug}.html">{html.escape(name)}</a></li>')
 
@@ -661,7 +680,7 @@ def build(run_date: str) -> None:
                 count=len(index_items),
                 items="\n".join(index_items),
                 header=_render_header(home_href="../index.html", nav_html='<nav><a href="../index.html">&larr; Home</a></nav>'),
-            ),
+            ).replace("__THEME_INIT__", THEME_INIT_SCRIPT),
             encoding="utf-8",
         )
         home_cards.append((layer, layer_title, len(index_items)))
@@ -680,7 +699,7 @@ def build(run_date: str) -> None:
             irr_count=counts.get("irrigation_organizations", 0),
             wd_count=counts.get("water_districts", 0),
             header=_render_header(home_href="index.html", nav_html=""),
-        ),
+        ).replace("__THEME_INIT__", THEME_INIT_SCRIPT),
         encoding="utf-8",
     )
 

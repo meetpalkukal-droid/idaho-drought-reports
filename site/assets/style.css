@@ -42,8 +42,16 @@
   --dc-c10: #104281; /* Exceptionally Wet */
 }
 
+/* Three-state theme: light (default), dark, and "system" (follows the
+   OS). A saved explicit choice (data-theme, set by theme.js) always wins
+   over the OS preference -- :not([data-theme="light"]) lets an explicit
+   light choice override a dark OS, and the [data-theme="dark"] block
+   below lets an explicit dark choice apply even on a light OS. Both dark
+   blocks intentionally duplicate the same token values (CSS custom
+   properties can't be shared across two separate selector blocks without
+   a preprocessor) -- if one is edited, edit the other to match. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --page: #0c0f12;
     --surface-1: #171b1f;
@@ -72,6 +80,35 @@
     --dc-c9: #2a78d6;
     --dc-c10: #3060a8;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0c0f12;
+  --surface-1: #171b1f;
+  --surface-2: #1c2126;
+  --header-bg: #0a1e33;
+  --header-fg: #ffffff;
+  --header-fg-muted: #9db6ce;
+  --text-primary: #f2f3f4;
+  --text-secondary: #b7bfc6;
+  --text-muted: #838d95;
+  --gridline: #2a2f34;
+  --border: rgba(255, 255, 255, 0.11);
+  --accent: #5b9bdb;
+  --accent-ink: #0a1e33;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.35);
+
+  --dc-c0: #c93a3a;
+  --dc-c1: #e8544f;
+  --dc-c2: #fb6a4a;
+  --dc-c3: #fc9272;
+  --dc-c4: #fcbba1;
+  --dc-c5: #4a4946;
+  --dc-c6: #9ec5f4;
+  --dc-c7: #6da7ec;
+  --dc-c8: #3987e5;
+  --dc-c9: #2a78d6;
+  --dc-c10: #3060a8;
 }
 
 * { box-sizing: border-box; }
@@ -124,13 +161,36 @@ p { margin: 0.8em 0; }
   position: sticky;
   top: 0;
   z-index: 40;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  /* A thin accent gradient reads as more considered than a flat rule --
+     small touch, but it's the one edge of the page always in view. */
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(to right, var(--accent), transparent 70%) 1;
 }
 .site-header .wide { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .site-header a { color: var(--header-fg); text-decoration: none; }
 .site-header a:hover { text-decoration: underline; }
 .site-header .brand { font-family: "Fraunces", Georgia, serif; font-size: 1.4rem; font-weight: 550; letter-spacing: -0.01em; }
 .site-header .tagline { color: var(--header-fg-muted); font-size: 0.92rem; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+/* Theme toggle: cycles system -> light -> dark -> system. Deliberately
+   plain-language ("Light"/"Dark"/"Auto") rather than icon-only, matching
+   this site's larger-text/plain-language accessibility stance elsewhere. */
+.theme-toggle {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--header-fg);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.4); }
+.theme-toggle:focus-visible { outline: 2px solid var(--header-fg); outline-offset: 2px; }
 
 main { padding: 40px 0 100px; }
 
@@ -503,6 +563,23 @@ ul { padding-left: 1.3em; }
 /* Home page */
 .hero {
   padding: 56px 0 44px;
+  position: relative;
+}
+/* A soft radial wash behind the hero text -- subtle enough to not compete
+   with the Fraunces headline, just enough to keep the top of the page
+   from feeling flat. Sits behind everything (z-index -1) and never
+   affects layout (absolute, no size). */
+.hero::before {
+  content: "";
+  position: absolute;
+  top: -60px;
+  left: -10%;
+  width: 60%;
+  min-width: 420px;
+  height: 340px;
+  background: radial-gradient(ellipse at top left, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
+  pointer-events: none;
+  z-index: -1;
 }
 .hero h1 {
   font-family: "Fraunces", Georgia, serif;
