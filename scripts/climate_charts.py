@@ -49,9 +49,10 @@ def load_gm_daily(csv_path: Path) -> pd.DataFrame:
 
 
 # Calendar (month, day) tuples in water-year order (Oct 1 -> Sep 30),
-# skipping Feb 29 for x-axis positioning (leap-year pentads just have one
-# fewer historical sample at whichever bucket they land closest to; not
-# worth a special axis case for one extra day every 4 years).
+# used only to place approximate month-boundary tick labels on the
+# pentad-rank x-axis (see bokeh_charts._month_ticks) -- NOT used to
+# align data across years any more (see normal_band_data's docstring
+# for why calendar-date alignment doesn't work for this dataset).
 def _water_year_calendar() -> list[tuple[int, int]]:
     months_days = []
     for m in (10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9):
@@ -62,12 +63,47 @@ def _water_year_calendar() -> list[tuple[int, int]]:
 
 
 WATER_YEAR_CALENDAR = _water_year_calendar()
-_WD_INDEX = {md: i + 1 for i, md in enumerate(WATER_YEAR_CALENDAR)}
 
 
-def water_day(month: int, day: int) -> int | None:
-    """1-based day-of-water-year for a (month, day); Feb 29 maps to Feb 28's slot."""
-    return _WD_INDEX.get((month, day), _WD_INDEX.get((2, 28)) if (month, day) == (2, 29) else None)
+def _pentad_rank(sub: pd.DataFrame) -> pd.Series:
+    """1-based sequential index of each row within its own water year,
+    in chronological order ('wd' downstream, though it's no longer a
+    literal day-of-water-year -- see normal_band_data)."""
+    return sub.sort_values("date").groupby("water_year").cumcount() + 1
+
+
+def _complete_water_years(sub: pd.DataFrame) -> set[int]:
+    """Water years with a full ~73/74-pentad record, excluding any
+    partial year -- confirmed against the real data that gm_timeseries.csv's
+    first on-record water year (1980) only starts Jan 1, 1980, so it has
+    just 55 pentad rows instead of 73/74. A rank-based partial year
+    desyncs from every other year for its entire length (by the time a
+    complete year reaches rank 54 in late June, 1980's rank 54 is
+    already late September, 55 rows into its own short record) and
+    would otherwise quietly contaminate the historical band at nearly
+    every rank, not just the ones near its missing months. 70 is well
+    below the legitimate minimum (73) and well above the two observed
+    partial-year counts (55 for 1980, and whatever the in-progress
+    current year has reached), so it cleanly separates the two cases
+    without hardcoding a specific year.
+    """
+    counts = sub.groupby("water_year").size()
+    return set(counts[counts >= 70].index)
+
+
+def _max_common_rank(sub: pd.DataFrame, complete_years: set[int]) -> int:
+    """The shortest complete water year's pentad count (73, in
+    practice) -- about 1 in 4 complete years get a 74th pentad (see
+    _water_year_calendar's leap-year comment), so without this cap the
+    band's very last point would average only that smaller subset of
+    years instead of all of them, reading as a one-step drop at the
+    end of the chart purely from the sample changing, not from any
+    actual seasonal dip. Confirmed against real data: every such drop
+    found across 65 districts was exactly at the last step (rank 73 to
+    74), nowhere else.
+    """
+    counts = sub[sub["water_year"].isin(complete_years)].groupby("water_year").size()
+    return int(counts.min()) if len(counts) else 0
 
 
 def normal_band_data(
@@ -81,27 +117,36 @@ def normal_band_data(
     water-year, plus the current water year's own trace, for one gm_*
     variable ("ETo", "Precip", "Tmax", "Tmin", or "Tmean" computed by the
     caller). cumulative=True accumulates within each water year first
-    (for precipitation-style running totals)."""
+    (for precipitation-style running totals).
+
+    Climate Engine's underlying gm_timeseries.csv is a 5-day pentad
+    composite, not truly daily, and its pentad schedule is anchored to
+    absolute day-of-year (DOY % 5 == 1) -- a standard day-of-year count,
+    which is well known to shift every calendar date from March onward
+    by one day in a leap year versus a non-leap year (confirmed against
+    the real data: leap years report Mar 1/6/11/.., non-leap years
+    report Mar 2/7/12/..). Bucketing by literal calendar (month, day) --
+    the previous approach -- mixes these two offset patterns together
+    at nearly every post-February slot, so the historical mean/percentile
+    band is really averaging two different sets of actual calendar
+    windows depending on each year's leap status, which shows up as a
+    persistent sawtooth from March through September (user-reported).
+    Bucketing instead by each row's sequential pentad rank within its
+    own water year (1st reading, 2nd reading, ...) compares the same
+    relative position in the season's reporting sequence across years
+    regardless of leap status, which is immune to this drift.
+    """
     sub = df[df["Variable"] == variable].sort_values("date").copy()
-    sub["wd"] = sub["month_day"].map(lambda md: water_day(*md))
-    sub = sub.dropna(subset=["wd"])
+    sub["wd"] = _pentad_rank(sub)
 
     if cumulative:
-        # Feb 29 shares Feb 28's water-day slot (see water_day()), so a
-        # leap year has two raw daily rows at that one wd. Sum them into
-        # a single bucket BEFORE accumulating -- otherwise the leap
-        # day's running total lands at the same x position as Feb 28's,
-        # one day's rainfall higher, and the line (plotted through wd in
-        # order) jumps straight up and back down at that x instead of
-        # continuing smoothly, and the historical band gets an extra,
-        # inconsistent sample at that slot every leap year.
-        daily = sub.groupby(["water_year", "wd"], as_index=False)["Value"].sum().sort_values(["water_year", "wd"])
-        daily["plot_value"] = daily.groupby("water_year")["Value"].cumsum()
-        sub = daily
+        sub["plot_value"] = sub.groupby("water_year")["Value"].cumsum()
     else:
         sub["plot_value"] = sub["Value"]
 
-    hist = sub[sub["water_year"] != current_water_year]
+    complete_years = _complete_water_years(sub)
+    hist = sub[(sub["water_year"] != current_water_year) & (sub["water_year"].isin(complete_years))]
+    hist = hist[hist["wd"] <= _max_common_rank(sub, complete_years)]
     band = (
         hist.groupby("wd")["plot_value"]
         .agg(mean="mean", p5=lambda s: s.quantile(0.05), p25=lambda s: s.quantile(0.25),
@@ -174,21 +219,24 @@ def current_vs_average(current_value: float, historical_values: np.ndarray) -> d
 
 def year_to_date_summary(df: pd.DataFrame, variable: str, current_water_year: int, *, cumulative: bool) -> dict | None:
     """current_vs_average, but the historical comparison is truncated to
-    the same day-of-water-year the current (possibly partial) water year
-    has reached -- comparing a partial year's total/mean against complete
-    prior FULL years would be biased. Close to, but not exactly, Climate
-    Engine's own gm_wb_summary/gm_temp_summary numbers (their precise
-    methodology isn't published); percentile rank matched CE exactly in
-    spot-checks even where the mean differed slightly -- see DECISIONS.md."""
+    the same point in the season's pentad sequence the current
+    (possibly partial) water year has reached -- comparing a partial
+    year's total/mean against complete prior FULL years would be
+    biased. Truncates by pentad rank, not calendar date, for the same
+    leap-year reason explained in normal_band_data's docstring. Close
+    to, but not exactly, Climate Engine's own gm_wb_summary/
+    gm_temp_summary numbers (their precise methodology isn't
+    published); percentile rank matched CE exactly in spot-checks even
+    where the mean differed slightly -- see DECISIONS.md."""
     sub = df[df["Variable"] == variable].copy()
-    sub["wd"] = sub["month_day"].map(lambda md: water_day(*md))
-    sub = sub.dropna(subset=["wd"])
+    sub["wd"] = _pentad_rank(sub)
 
     current = sub[sub["water_year"] == current_water_year].sort_values("wd")
     if current.empty:
         return None
-    last_wd = current["wd"].max()
-    hist = sub[(sub["water_year"] != current_water_year) & (sub["wd"] <= last_wd)]
+    complete_years = _complete_water_years(sub)
+    last_wd = min(current["wd"].max(), _max_common_rank(sub, complete_years) or current["wd"].max())
+    hist = sub[(sub["water_year"] != current_water_year) & (sub["water_year"].isin(complete_years)) & (sub["wd"] <= last_wd)]
 
     if cumulative:
         current_value = float(current["Value"].sum())

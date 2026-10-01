@@ -50,13 +50,18 @@ CURRENT_COLOR = "#e34948"
 
 
 def _month_ticks() -> dict[int, str]:
-    """water-day position -> 'Oct' etc. for the 1st of each month, in
-    water-year order (Oct 1 = day 1)."""
+    """Approximate pentad-rank position -> 'Oct' etc. for the 1st of
+    each month, in water-year order. normal_band_data's x-axis is a
+    pentad SEQUENCE RANK (1st reading of the water year, 2nd, ...), not
+    a literal day-of-year, so this divides each month start's calendar-
+    day position by 5 to land the label near the right pentad -- ticks
+    are cosmetic only, off by at most one pentad (~5 days)."""
     ticks = {}
     for i, (m, d) in enumerate(WATER_YEAR_CALENDAR, start=1):
         if d == 1:
-            ticks[i] = {10: "Oct", 11: "Nov", 12: "Dec", 1: "Jan", 2: "Feb", 3: "Mar",
-                        4: "Apr", 5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep"}[m]
+            rank = max(1, round(i / 5))
+            ticks[rank] = {10: "Oct", 11: "Nov", 12: "Dec", 1: "Jan", 2: "Feb", 3: "Mar",
+                           4: "Apr", 5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep"}[m]
     return ticks
 
 
@@ -91,7 +96,7 @@ def normal_band_figure(band: dict, *, title: str, y_label: str) -> figure:
     fig.xaxis.ticker = list(ticks.keys())
     fig.xaxis.major_label_overrides = {k: v for k, v in ticks.items()}
     fig.x_range.start = 1
-    fig.x_range.end = len(WATER_YEAR_CALENDAR)
+    fig.x_range.end = round(len(WATER_YEAR_CALENDAR) / 5)  # ~73 pentad ranks, see _month_ticks
 
     hist_src = ColumnDataSource(dict(
         wd=band["wd"], mean=band["mean"], p5=band["p5"], p25=band["p25"],
