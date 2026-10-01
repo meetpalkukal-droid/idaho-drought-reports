@@ -83,12 +83,23 @@ def normal_band_data(
     caller). cumulative=True accumulates within each water year first
     (for precipitation-style running totals)."""
     sub = df[df["Variable"] == variable].sort_values("date").copy()
-    if cumulative:
-        sub["plot_value"] = sub.groupby("water_year")["Value"].cumsum()
-    else:
-        sub["plot_value"] = sub["Value"]
     sub["wd"] = sub["month_day"].map(lambda md: water_day(*md))
     sub = sub.dropna(subset=["wd"])
+
+    if cumulative:
+        # Feb 29 shares Feb 28's water-day slot (see water_day()), so a
+        # leap year has two raw daily rows at that one wd. Sum them into
+        # a single bucket BEFORE accumulating -- otherwise the leap
+        # day's running total lands at the same x position as Feb 28's,
+        # one day's rainfall higher, and the line (plotted through wd in
+        # order) jumps straight up and back down at that x instead of
+        # continuing smoothly, and the historical band gets an extra,
+        # inconsistent sample at that slot every leap year.
+        daily = sub.groupby(["water_year", "wd"], as_index=False)["Value"].sum().sort_values(["water_year", "wd"])
+        daily["plot_value"] = daily.groupby("water_year")["Value"].cumsum()
+        sub = daily
+    else:
+        sub["plot_value"] = sub["Value"]
 
     hist = sub[sub["water_year"] != current_water_year]
     band = (
